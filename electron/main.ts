@@ -14,6 +14,7 @@ import {
 } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { performanceMonitor } from './performance-monitor'
 
 let overlayWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
@@ -585,6 +586,42 @@ function setupIPC() {
 
   ipcMain.on('open-external', (_event, url: string) => {
     shell.openExternal(url)
+  })
+
+  // Performance monitoring IPC handlers
+  ipcMain.handle('get-performance-summary', () => {
+    return performanceMonitor.getPerformanceSummary()
+  })
+
+  ipcMain.handle('get-optimization-status', () => {
+    return performanceMonitor.getOptimizationStatus()
+  })
+
+  ipcMain.handle('get-latency-metrics', () => {
+    return performanceMonitor.getLatencyMetrics()
+  })
+
+  ipcMain.handle('get-api-calls', (_event, limit: number) => {
+    return performanceMonitor.getApiCalls(limit)
+  })
+
+  ipcMain.handle('get-execution-trace', (_event, callId: string) => {
+    return performanceMonitor.getExecutionTrace(callId)
+  })
+
+  ipcMain.handle('reset-performance-metrics', () => {
+    performanceMonitor.reset()
+    return { success: true }
+  })
+
+  ipcMain.handle('set-optimization-features', (_event, features: {
+    connectionPool?: boolean;
+    compression?: boolean;
+    caching?: boolean;
+    asyncProcessing?: boolean;
+  }) => {
+    performanceMonitor.setOptimizationFeatures(features)
+    return { success: true }
   })
 }
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { PerformanceDashboard } from './PerformanceDashboard'
 
 const LANGUAGES = [
     { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
@@ -132,7 +133,7 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 }
 
 export function SettingsView() {
-    const [activeTab, setActiveTab] = useState<'recording' | 'api'>('recording')
+    const [activeTab, setActiveTab] = useState<'recording' | 'api' | 'performance'>('recording')
     const [apiKey, setApiKey] = useState('')
     const [apiKeyInput, setApiKeyInput] = useState('')
     const [customPrompt, setCustomPrompt] = useState('')
@@ -274,12 +275,21 @@ export function SettingsView() {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M4 12h8" /><path d="M4 18V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><path d="M18 12h2" /><path d="M18 6h2" /><path d="M18 18h2" />
                         </svg>
-                        <span>API & Nâng cao</span>
+                        <span>API</span>
+                    </button>
+                    <button
+                        className={`settings-tab ${activeTab === 'performance' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('performance')}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                        </svg>
+                        <span>Hiệu năng</span>
                     </button>
                     <div
                         className="settings-tab-indicator"
                         style={{
-                            transform: activeTab === 'recording' ? 'translateX(0%)' : 'translateX(100%)'
+                            transform: activeTab === 'recording' ? 'translateX(0)' : activeTab === 'api' ? 'translateX(calc(100% + 2px))' : 'translateX(calc(200% + 4px))'
                         }}
                     />
                 </div>
@@ -316,7 +326,7 @@ export function SettingsView() {
                                 </div>
                             </div>
                         </div>
-                    ) : (
+                    ) : activeTab === 'api' ? (
                         /* API & Advanced Tab */
                         <div className="tab-content-stack">
                             {/* Connection Section */}
@@ -491,6 +501,9 @@ export function SettingsView() {
                                 </div>
                             </CollapsibleSection>
                         </div>
+                    ) : (
+                        /* Performance Tab */
+                        <PerformanceDashboard />
                     )}
                 </div>
 

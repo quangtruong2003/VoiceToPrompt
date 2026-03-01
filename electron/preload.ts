@@ -45,5 +45,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   closeSettings: () => {
     ipcRenderer.send('close-settings')
+  },
+
+  // Performance monitoring APIs
+  getPerformanceSummary: () => {
+    return ipcRenderer.invoke('get-performance-summary')
+  },
+
+  getOptimizationStatus: () => {
+    return ipcRenderer.invoke('get-optimization-status')
+  },
+
+  getLatencyMetrics: () => {
+    return ipcRenderer.invoke('get-latency-metrics')
+  },
+
+  getApiCalls: (limit: number = 50) => {
+    return ipcRenderer.invoke('get-api-calls', limit)
+  },
+
+  getExecutionTrace: (callId: string) => {
+    return ipcRenderer.invoke('get-execution-trace', callId)
+  },
+
+  resetPerformanceMetrics: () => {
+    return ipcRenderer.invoke('reset-performance-metrics')
+  },
+
+  setOptimizationFeatures: (features: {
+    connectionPool?: boolean;
+    compression?: boolean;
+    caching?: boolean;
+    asyncProcessing?: boolean;
+  }) => {
+    return ipcRenderer.invoke('set-optimization-features', features)
   }
 })
