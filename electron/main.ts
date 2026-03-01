@@ -116,7 +116,7 @@ function createOverlayWindow() {
     resizable: false,
     skipTaskbar: false, // Show icon in taskbar
     show: false,
-    focusable: false,
+    focusable: true, // Enable focus so window can be brought to foreground
     // Set taskbar icon
     icon: createTaskbarIcon(),
     webPreferences: {
@@ -150,10 +150,10 @@ function createOverlayWindow() {
     overlayWindow.loadFile(url, { hash: 'overlay' })
   }
 
-  // Show window when ready
-  overlayWindow.once('ready-to-show', () => {
-    overlayWindow?.show()
-  })
+  // Don't show window automatically - only show when recording starts
+  // overlayWindow.once('ready-to-show', () => {
+  //   overlayWindow?.show()
+  // })
 }
 
 function createSettingsWindow() {
@@ -327,14 +327,14 @@ function createTray() {
 
   tray.setContextMenu(contextMenu)
 
-  // Single click restores window
+  // Single click opens settings directly
   tray.on('click', () => {
-    showOverlayWindow()
+    createSettingsWindow()
   })
 
-  // Double-click also restores
+  // Remove double-click handler
   tray.on('double-click', () => {
-    showOverlayWindow()
+    createSettingsWindow()
   })
 }
 
@@ -343,8 +343,9 @@ function createTray() {
  */
 function showOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
+    // Use show() + focus() instead of showInactive() to ensure window comes to foreground
     overlayWindow.show()
-    overlayWindow.showInactive()
+    overlayWindow.focus()
   }
   isInTray = false
 }
@@ -390,6 +391,7 @@ function toggleRecording() {
 
   if (isRecording) {
     registerEnterShortcut()
+    // Show window without stealing focus from the user's current text editor/app
     overlayWindow?.showInactive()
     overlayWindow?.webContents.send('toggle-recording', true)
   } else {
