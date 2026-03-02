@@ -608,8 +608,11 @@ function setupIPC() {
   ipcMain.handle('get-config', () => {
     const config = loadConfig()
     const envKey = loadEnvApiKey()
-    // Get actual auto-start status from system
-    const autoStartStatus = getAutoStartStatus()
+    // Use config value if exists, otherwise get from system
+    // This ensures UI shows the saved preference, not just system state
+    const autoStartStatus = config.startWithWindows !== undefined
+      ? config.startWithWindows
+      : getAutoStartStatus()
     return { ...config, apiKey: envKey || config.apiKey, hasEnvKey: !!envKey, startWithWindows: autoStartStatus }
   })
 
@@ -700,7 +703,13 @@ app.whenReady().then(() => {
 
   // Apply auto-start setting on startup
   const config = loadConfig()
-  if (config.startWithWindows !== undefined) {
+  const systemAutoStart = getAutoStartStatus()
+
+  // Sync config with system state if not set yet
+  if (config.startWithWindows === undefined) {
+    saveConfig({ startWithWindows: systemAutoStart })
+  } else if (config.startWithWindows !== systemAutoStart) {
+    // Config differs from system - update system to match config
     setAutoStart(config.startWithWindows)
   }
 

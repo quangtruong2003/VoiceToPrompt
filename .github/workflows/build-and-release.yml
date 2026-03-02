@@ -2,8 +2,8 @@ name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -20,16 +20,68 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Get version from package.json
+        id: version
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          Write-Output "current_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Auto-increment version
+        id: increment
+        run: |
+          $version = "${{ steps.version.outputs.current_version }}"
+          $parts = $version.Split('.')
+          $parts[-1] = [int]$parts[-1] + 1
+          $newVersion = $parts -join '.'
+          Write-Output "new_version=$newVersion" >> $env:GITHUB_OUTPUT
+          Write-Output "Package version: $version -> $newVersion"
+
+      - name: Update package.json with new version
+        run: |
+          $json = Get-Content package.json | ConvertFrom-Json
+          $json.version = "${{ steps.increment.outputs.new_version }}"
+          $json | ConvertTo-Json -Depth 10 | Set-Content package.json
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build the application
         run: npm run build
 
+      - name: Find NSIS web file
+        id: find-file
+        run: |
+          $file = Get-ChildItem -Path release -Filter "*.nsis.7z" -Recurse | Select-Object -First 1
+          if ($file) {
+            Write-Output "file_path=$($file.FullName)" >> $env:GITHUB_OUTPUT
+            Write-Output "Found: $($file.Name)"
+          } else {
+            Write-Output "file_path=" >> $env:GITHUB_OUTPUT
+            Write-Output "No .nsis.7z file found"
+          }
+
       - name: Upload Release Asset
+        if: steps.find-file.outputs.file_path != ''
         uses: softprops/action-gh-release@v2
         with:
-          files: release/**/*.exe
+          tag_name: v${{ steps.increment.outputs.new_version }}
+          name: Voice to Text v${{ steps.increment.outputs.new_version }}
+          body: |
+            ## What's New
+            Auto-generated release from commit ${{ github.sha }}
+            
+            **Version:** ${{ steps.increment.outputs.new_version }}
+            **Download:** voice-to-text-${{ steps.increment.outputs.new_version }}-x64.nsis.7z
+          files: ${{ steps.find-file.outputs.file_path }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit version bump
+        if: steps.find-file.outputs.file_path != ''
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.increment.outputs.new_version }}"
+          git push
