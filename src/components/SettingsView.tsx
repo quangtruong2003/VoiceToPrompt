@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { PerformanceDashboard } from './PerformanceDashboard'
+import { HistoryView } from './HistoryView'
+import { useAudioDevices } from '../hooks/useAudioDevices'
 
 const LANGUAGES = [
     { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
@@ -162,6 +164,18 @@ export function SettingsView() {
     const [showApiKey, setShowApiKey] = useState(false)
     const [startWithWindows, setStartWithWindows] = useState(false)
 
+    // Punctuation & formatting settings
+    const [punctuationSettings, setPunctuationSettings] = useState({
+        autoCapitalize: true,
+        addPeriodAtEnd: true,
+        removeFillerWords: false,
+        numberFormatting: 'none' as 'none' | 'digits' | 'words',
+    })
+    const [showTextEditor, setShowTextEditor] = useState(true)
+
+    // Audio device state
+    const { devices: audioDevices, selectedDeviceId: selectedAudioDevice, isLoading: audioDevicesLoading, selectDevice: setAudioDevice, reloadDevices: reloadAudioDevices } = useAudioDevices()
+
     // Hotkey customization state
     const [hotkey, setHotkey] = useState({ win: true, alt: true, key: 'H' })
     const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
@@ -178,6 +192,12 @@ export function SettingsView() {
             if (config.apiType) setApiType(config.apiType)
             if (config.customEndpoint) setCustomEndpoint(config.customEndpoint)
             if (config.startWithWindows !== undefined) setStartWithWindows(config.startWithWindows)
+            if (config.punctuationSettings) {
+                setPunctuationSettings(config.punctuationSettings)
+            }
+            if (config.showTextEditor !== undefined) {
+                setShowTextEditor(config.showTextEditor)
+            }
             if (config.hotkey) {
                 const parts = config.hotkey.split('+')
                 setHotkey({
@@ -248,6 +268,24 @@ export function SettingsView() {
 
     const handleEndpointBlur = async () => {
         await window.electronAPI.saveConfig({ customEndpoint })
+    }
+
+    const handlePunctuationSettingChange = async (key: keyof typeof punctuationSettings, value: any) => {
+        const newSettings = { ...punctuationSettings, [key]: value }
+        setPunctuationSettings(newSettings)
+        await window.electronAPI.saveConfig({ punctuationSettings: newSettings })
+        showToast('Đã lưu cài đặt!', 'success')
+    }
+
+    const handleShowTextEditorChange = async (enabled: boolean) => {
+        setShowTextEditor(enabled)
+        await window.electronAPI.saveConfig({ showTextEditor: enabled })
+        showToast(enabled ? 'Đã bật chỉnh sửa văn bản!' : 'Đã tắt chỉnh sửa văn bản!', 'success')
+    }
+
+    const handleAudioDeviceChange = async (deviceId: string) => {
+        setAudioDevice(deviceId)
+        showToast('Đã chọn microphone!', 'success')
     }
 
     const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -427,86 +465,253 @@ export function SettingsView() {
                 <div className="settings-body">
                     {activeTab === 'settings' ? (
                         /* Settings Tab */
-                        <div className="settings-section-group">
-                            <div className="section-header">
-                                <span className="section-icon-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <circle cx="12" cy="12" r="3"></circle>
-                                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                                    </svg>
-                                </span>
-                                <span className="section-title">Cài đặt</span>
+                        <div className="tab-content-stack">
+                            {/* Group 1: Ngôn ngữ & Phím tắt */}
+                            <div className="settings-section-group">
+                                <div className="section-header">
+                                    <span className="section-icon-wrap">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </span>
+                                    <span className="section-title">Cài đặt</span>
+                                </div>
+                                <div className="section-content-inner">
+                                    <div className="settings-section">
+                                        <label className="settings-label">Ngôn ngữ mặc định</label>
+                                        <div className="language-selector">
+                                            {LANGUAGES.map((lang) => (
+                                                <button
+                                                    key={lang.code}
+                                                    className={`language-chip ${language === lang.code ? 'active' : ''}`}
+                                                    onClick={() => handleLanguageChange(lang.code)}
+                                                >
+                                                    <span className="language-flag">{lang.flag}</span>
+                                                    <span className="language-name">{lang.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="settings-section">
+                                        <label className="settings-label">Phím tắt ghi âm</label>
+                                        <div className="hotkey-capture">
+                                            {isRecordingHotkey ? (
+                                                <div className="hotkey-recording">
+                                                    <span className="recording-indicator"></span>
+                                                    <span>Nhấn phím tắt mới...</span>
+                                                    <button
+                                                        className="btn btn-ghost btn-small"
+                                                        onClick={() => setIsRecordingHotkey(false)}
+                                                    >
+                                                        Hủy
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="hotkey-display-setting">
+                                                    <div className="current-hotkey">
+                                                        <kbd>Win</kbd>
+                                                        <span>+</span>
+                                                        <kbd>Alt</kbd>
+                                                        <span>+</span>
+                                                        <kbd>{hotkey.key}</kbd>
+                                                    </div>
+                                                    <button
+                                                        className="btn btn-primary btn-small"
+                                                        onClick={() => setIsRecordingHotkey(true)}
+                                                    >
+                                                        Đổi phím tắt
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="settings-hint">
+                                            Nhấn phím mới (cần có Win + Alt + phím khác)
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="section-content-inner">
-                                <div className="settings-section">
-                                    <label className="settings-label">Ngôn ngữ mặc định</label>
-                                    <div className="language-selector">
-                                        {LANGUAGES.map((lang) => (
+                            {/* Group 2: Khởi động & Chỉnh sửa văn bản */}
+                            <div className="settings-section-group">
+                                <div className="section-header">
+                                    <span className="section-icon-wrap">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0-3-3 3 3 0 0 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
+                                        </svg>
+                                    </span>
+                                    <span className="section-title">Hệ thống</span>
+                                </div>
+                                <div className="section-content-inner">
+                                    <div className="settings-section">
+                                        <div className="toggle-setting">
+                                            <span className="toggle-label">Bắt đầu cùng Windows</span>
                                             <button
-                                                key={lang.code}
-                                                className={`language-chip ${language === lang.code ? 'active' : ''}`}
-                                                onClick={() => handleLanguageChange(lang.code)}
+                                                className={`toggle-switch ${startWithWindows ? 'active' : ''}`}
+                                                onClick={() => handleStartWithWindowsChange(!startWithWindows)}
+                                                role="switch"
+                                                aria-checked={startWithWindows}
                                             >
-                                                <span className="language-flag">{lang.flag}</span>
-                                                <span className="language-name">{lang.name}</span>
+                                                <span className="toggle-slider" />
                                             </button>
-                                        ))}
+                                        </div>
+                                        <p className="settings-hint">
+                                            Tự động khởi động ứng dụng khi đăng nhập vào Windows
+                                        </p>
+                                    </div>
+
+                                    <div className="settings-section">
+                                        <div className="toggle-setting">
+                                            <span className="toggle-label">Chỉnh sửa văn bản trước khi paste</span>
+                                            <button
+                                                className={`toggle-switch ${showTextEditor ? 'active' : ''}`}
+                                                onClick={() => handleShowTextEditorChange(!showTextEditor)}
+                                                role="switch"
+                                                aria-checked={showTextEditor}
+                                            >
+                                                <span className="toggle-slider" />
+                                            </button>
+                                        </div>
+                                        <p className="settings-hint">
+                                            Hiện modal chỉnh sửa văn bản sau khi transcription
+                                        </p>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div className="settings-section">
-                                    <label className="settings-label">Phím tắt ghi âm</label>
-                                    <div className="hotkey-capture">
-                                        {isRecordingHotkey ? (
-                                            <div className="hotkey-recording">
-                                                <span className="recording-indicator"></span>
-                                                <span>Nhấn phím tắt mới...</span>
-                                                <button
-                                                    className="btn btn-ghost btn-small"
-                                                    onClick={() => setIsRecordingHotkey(false)}
-                                                >
-                                                    Hủy
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="hotkey-display-setting">
-                                                <div className="current-hotkey">
-                                                    <kbd>Win</kbd>
-                                                    <span>+</span>
-                                                    <kbd>Alt</kbd>
-                                                    <span>+</span>
-                                                    <kbd>{hotkey.key}</kbd>
-                                                </div>
-                                                <button
-                                                    className="btn btn-primary btn-small"
-                                                    onClick={() => setIsRecordingHotkey(true)}
-                                                >
-                                                    Đổi phím tắt
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="settings-hint">
-                                        Nhấn phím mới (cần có Win + Alt + phím khác)
-                                    </p>
-                                </div>
-
+                            {/* Group 3: Định dạng văn bản */}
+                            <CollapsibleSection
+                                title="Định dạng văn bản"
+                                icon={
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M4 7V4h16v3" />
+                                        <path d="M9 20h6" />
+                                        <path d="M12 4v16" />
+                                    </svg>
+                                }
+                                defaultOpen={true}
+                            >
                                 <div className="settings-section">
                                     <div className="toggle-setting">
-                                        <span className="toggle-label">Bắt đầu cùng Windows</span>
+                                        <span className="toggle-label">Viết hoa đầu câu</span>
                                         <button
-                                            className={`toggle-switch ${startWithWindows ? 'active' : ''}`}
-                                            onClick={() => handleStartWithWindowsChange(!startWithWindows)}
+                                            className={`toggle-switch ${punctuationSettings.autoCapitalize ? 'active' : ''}`}
+                                            onClick={() => handlePunctuationSettingChange('autoCapitalize', !punctuationSettings.autoCapitalize)}
                                             role="switch"
-                                            aria-checked={startWithWindows}
+                                            aria-checked={punctuationSettings.autoCapitalize}
                                         >
                                             <span className="toggle-slider" />
                                         </button>
                                     </div>
-                                    <p className="settings-hint">
-                                        Tự động khởi động ứng dụng khi đăng nhập vào Windows
-                                    </p>
+                                </div>
+
+                                <div className="settings-section">
+                                    <div className="toggle-setting">
+                                        <span className="toggle-label">Thêm dấu chấm cuối câu</span>
+                                        <button
+                                            className={`toggle-switch ${punctuationSettings.addPeriodAtEnd ? 'active' : ''}`}
+                                            onClick={() => handlePunctuationSettingChange('addPeriodAtEnd', !punctuationSettings.addPeriodAtEnd)}
+                                            role="switch"
+                                            aria-checked={punctuationSettings.addPeriodAtEnd}
+                                        >
+                                            <span className="toggle-slider" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="settings-section">
+                                    <div className="toggle-setting">
+                                        <span className="toggle-label">Xóa từ thừa (à, ừ, um, uh...)</span>
+                                        <button
+                                            className={`toggle-switch ${punctuationSettings.removeFillerWords ? 'active' : ''}`}
+                                            onClick={() => handlePunctuationSettingChange('removeFillerWords', !punctuationSettings.removeFillerWords)}
+                                            role="switch"
+                                            aria-checked={punctuationSettings.removeFillerWords}
+                                        >
+                                            <span className="toggle-slider" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="settings-section">
+                                    <label className="settings-label">Định dạng số</label>
+                                    <div className="number-format-selector">
+                                        <button
+                                            className={`format-option ${punctuationSettings.numberFormatting === 'none' ? 'active' : ''}`}
+                                            onClick={() => handlePunctuationSettingChange('numberFormatting', 'none')}
+                                        >
+                                            Giữ nguyên
+                                        </button>
+                                        <button
+                                            className={`format-option ${punctuationSettings.numberFormatting === 'digits' ? 'active' : ''}`}
+                                            onClick={() => handlePunctuationSettingChange('numberFormatting', 'digits')}
+                                        >
+                                            Chuyển thành số (1, 2, 3)
+                                        </button>
+                                    </div>
+                                </div>
+                            </CollapsibleSection>
+
+                            {/* Group 4: Microphone */}
+                            <div className="settings-section-group">
+                                <div className="section-header">
+                                    <span className="section-icon-wrap">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                            <line x1="12" y1="19" x2="12" y2="23" />
+                                            <line x1="8" y1="23" x2="16" y2="23" />
+                                        </svg>
+                                    </span>
+                                    <span className="section-title">Microphone</span>
+                                </div>
+                                <div className="section-content-inner">
+                                    <div className="settings-section">
+                                        <label className="settings-label">Thiết bị Microphone</label>
+                                        {audioDevicesLoading ? (
+                                            <div className="device-loading">
+                                                <span className="device-spinner"></span>
+                                                <span>Đang tìm thiết bị...</span>
+                                            </div>
+                                        ) : audioDevices.length === 0 ? (
+                                            <div className="device-empty">
+                                                <span>Không tìm thấy microphone</span>
+                                                <button className="btn btn-ghost btn-small" onClick={reloadAudioDevices}>
+                                                    Thử lại
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="device-selector">
+                                                <select
+                                                    className="settings-input"
+                                                    value={selectedAudioDevice}
+                                                    onChange={(e) => handleAudioDeviceChange(e.target.value)}
+                                                >
+                                                    {audioDevices.map((device) => (
+                                                        <option key={device.deviceId} value={device.deviceId}>
+                                                            {device.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    className="btn btn-ghost btn-small"
+                                                    onClick={reloadAudioDevices}
+                                                    title="Làm mới danh sách"
+                                                >
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M21 2v6h-6" />
+                                                        <path d="M3 12a9 9 0 0115-6.7L21 8" />
+                                                        <path d="M3 22v-6h6" />
+                                                        <path d="M21 12a9 9 0 01-15 6.7L3 16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        )}
+                                        <p className="settings-hint">
+                                            Chọn microphone để ghi âm
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -685,10 +890,10 @@ export function SettingsView() {
                                 </div>
                             </CollapsibleSection>
                         </div>
-                    ) : (
+                    ) : activeTab === 'performance' ? (
                         /* Performance Tab */
                         <PerformanceDashboard />
-                    )}
+                    ) : null}
                 </div>
 
                 <div className="settings-footer">

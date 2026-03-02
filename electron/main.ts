@@ -18,6 +18,7 @@ import { performanceMonitor } from './performance-monitor'
 
 let overlayWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
+let historyWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isRecording = false
 let isInTray = false // Track if app is minimized to tray
@@ -43,6 +44,22 @@ interface AppConfig {
   customEndpoint: string
   startWithWindows: boolean
   hotkey: string
+  // Punctuation & Formatting Settings
+  punctuationSettings: {
+    autoCapitalize: boolean
+    addPeriodAtEnd: boolean
+    removeFillerWords: boolean
+    numberFormatting: 'none' | 'digits' | 'words'
+  }
+  showTextEditor: boolean
+}
+
+// Default punctuation settings
+const DEFAULT_PUNCTUATION_SETTINGS = {
+  autoCapitalize: true,
+  addPeriodAtEnd: true,
+  removeFillerWords: false,
+  numberFormatting: 'none' as const,
 }
 
 function loadEnvApiKey(): string {
@@ -61,10 +78,31 @@ function loadConfig(): AppConfig {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
-      return { apiKey: '', language: 'vi', customPrompt: '', apiType: 'google', customEndpoint: '', startWithWindows: false, hotkey: 'Win+Alt+H', ...config }
+      return {
+        apiKey: '',
+        language: 'vi',
+        customPrompt: '',
+        apiType: 'google',
+        customEndpoint: '',
+        startWithWindows: false,
+        hotkey: 'Win+Alt+H',
+        punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
+        showTextEditor: true,
+        ...config
+      }
     }
   } catch {}
-  return { apiKey: '', language: 'vi', customPrompt: '', apiType: 'google', customEndpoint: '', startWithWindows: false, hotkey: 'Win+Alt+H' }
+  return {
+    apiKey: '',
+    language: 'vi',
+    customPrompt: '',
+    apiType: 'google',
+    customEndpoint: '',
+    startWithWindows: false,
+    hotkey: 'Win+Alt+H',
+    punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
+    showTextEditor: true,
+  }
 }
 
 function getApiKey(): string {
@@ -235,6 +273,71 @@ function createSettingsWindow() {
   })
 }
 
+/**
+ * Creates the history window for viewing transcription history
+ */
+function createHistoryWindow() {
+  if (historyWindow && !historyWindow.isDestroyed()) {
+    historyWindow.show()
+    historyWindow.focus()
+    return
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
+
+  historyWindow = new BrowserWindow({
+    width: 480,
+    height: 600,
+    x: Math.round((screenWidth - 480) / 2),
+    y: Math.round((screenHeight - 600) / 2),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    show: false,
+    alwaysOnTop: false,
+    icon: createTaskbarIcon(),
+    webPreferences: {
+      preload: path.join(ELECTRON_DIST, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  // Handle close - hide instead of closing
+  historyWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault()
+      historyWindow?.hide()
+    }
+  })
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    historyWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#history`)
+  } else {
+    historyWindow.loadFile(path.join(DIST, 'index.html'), { hash: 'history' })
+  }
+
+  historyWindow.once('ready-to-show', () => {
+    historyWindow?.show()
+    historyWindow?.focus()
+  })
+
+  historyWindow.on('closed', () => {
+    historyWindow = null
+  })
+}
+
+/**
+ * Sets the history window always on top state
+ */
+function setHistoryWindowPinned(pinned: boolean) {
+  if (historyWindow && !historyWindow.isDestroyed()) {
+    historyWindow.setAlwaysOnTop(pinned, 'screen-saver')
+  }
+}
+
 // ============================================================
 // ICON LOADING UTILITIES
 // ============================================================
@@ -330,8 +433,8 @@ function createTray() {
   // Build context menu with standard options
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Hiện cửa sổ',
-      click: () => showOverlayWindow(),
+      label: 'Lịch sử',
+      click: () => createHistoryWindow(),
     },
     {
       label: 'Cài đặt',
@@ -491,7 +594,67 @@ async function transcribeAudio(audioBuffer: ArrayBuffer, language: string): Prom
   }
 
   const data = await response.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+
+  // Apply punctuation/formatting settings
+  const punctuationSettings = config.punctuationSettings || DEFAULT_PUNCTUATION_SETTINGS
+  return formatText(rawText, punctuationSettings)
+}
+
+/**
+ * Format text based on punctuation settings
+ */
+function formatText(text: string, settings: AppConfig['punctuationSettings']): string {
+  let formatted = text
+
+  // Remove filler words (Vietnamese: à, ừ, ờ, ơ, ạ... | English: um, uh, er...)
+  if (settings.removeFillerWords) {
+    const vietnameseFillers = /\b(à|ừ|ờ|ơ|ạ|à|úi|ui|ở|ể|ọ|ể|ị|ì|ì|ì)\b/gi
+    const englishFillers = /\b(um|uh|er|ah|like|you know|well|so|I mean)\b/gi
+    const japaneseFillers = /\b(あの|その|つまり|えーと)\b/gi
+    const koreanFillers = /\b(음|어|저기|그냥)\b/gi
+    const chineseFillers = /\b(嗯|啊|这个|就是)\b/gi
+
+    formatted = formatted
+      .replace(vietnameseFillers, '')
+      .replace(englishFillers, '')
+      .replace(japaneseFillers, '')
+      .replace(koreanFillers, '')
+      .replace(chineseFillers, '')
+
+    // Clean up multiple spaces
+    formatted = formatted.replace(/\s+/g, ' ').trim()
+  }
+
+  // Auto capitalize first letter of sentences
+  if (settings.autoCapitalize) {
+    formatted = formatted.replace(/(^\w|[.!?]\s+\w)/g, (match) => match.toUpperCase())
+  }
+
+  // Add period at end if no punctuation
+  if (settings.addPeriodAtEnd) {
+    const trimmed = formatted.trim()
+    if (trimmed && !/[.!?]$/.test(trimmed)) {
+      formatted = trimmed + '.'
+    }
+  }
+
+  // Number formatting
+  if (settings.numberFormatting === 'digits') {
+    // Convert number words to digits
+    const numberWords: Record<string, string> = {
+      'một': '1', 'hai': '2', 'ba': '3', 'bốn': '4', 'năm': '5',
+      'sáu': '6', 'bảy': '7', 'tám': '8', 'chín': '9', 'mười': '10',
+      'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+      'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
+    }
+    for (const [word, digit] of Object.entries(numberWords)) {
+      const regex = new RegExp(`\\b${word}\\b`, 'gi')
+      formatted = formatted.replace(regex, digit)
+    }
+  }
+
+  return formatted.trim()
 }
 
 async function validateApiKey(apiKey: string): Promise<{valid: boolean, error?: string}> {
@@ -652,6 +815,15 @@ function setupIPC() {
 
   ipcMain.on('close-settings', () => {
     settingsWindow?.hide()
+  })
+
+  ipcMain.on('close-history', () => {
+    historyWindow?.hide()
+  })
+
+  ipcMain.handle('set-history-pinned', (_event, pinned: boolean) => {
+    setHistoryWindowPinned(pinned)
+    return { success: true }
   })
 
   ipcMain.on('open-external', (_event, url: string) => {

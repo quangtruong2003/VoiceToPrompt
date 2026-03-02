@@ -1,5 +1,6 @@
 import { OverlayView } from './components/OverlayView'
 import { SettingsView } from './components/SettingsView'
+import { HistoryView } from './components/HistoryView'
 import './styles/index.css'
 
 function App() {
@@ -7,6 +8,10 @@ function App() {
 
     if (hash === 'settings') {
         return <SettingsView />
+    }
+
+    if (hash === 'history') {
+        return <HistoryView />
     }
 
     return <OverlayView />

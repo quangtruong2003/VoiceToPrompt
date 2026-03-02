@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
+import { TextEditorModal } from './TextEditorModal'
+import { addToHistory } from '../lib/transcription-history'
 
 const LANGUAGES = [
     { code: 'vi', label: 'VI' },
@@ -39,12 +41,17 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 }
 
 export function OverlayView() {
-    const { isRecording, duration, startRecording, stopRecording } = useAudioRecorder()
+    const [audioDeviceId, setAudioDeviceId] = useState<string>('')
+    const { isRecording, duration, startRecording, stopRecording } = useAudioRecorder({ deviceId: audioDeviceId })
     const [state, setState] = useState<OverlayState>('idle')
     const [language, setLanguage] = useState('vi')
     const [error, setError] = useState<string | null>(null)
     const [isVisible, setIsVisible] = useState(false)
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
+    // Text editor modal state
+    const [showTextEditor, setShowTextEditor] = useState(false)
+    const [pendingText, setPendingText] = useState('')
+    const [recordingDuration, setRecordingDuration] = useState(0)
     // Preserve recording data during API errors
     const [preservedBlob, setPreservedBlob] = useState<Blob | null>(null)
 
@@ -66,6 +73,8 @@ export function OverlayView() {
 
     const handleStopAndTranscribe = useCallback(async () => {
         const blob = await stopRecording()
+        // Capture duration before resetting
+        const currentDuration = duration
         if (!blob || blob.size < 1000) {
             showToast('No audio detected', 'error')
             setState('idle')
@@ -73,13 +82,17 @@ export function OverlayView() {
         }
         // Preserve the recording blob for retry
         setPreservedBlob(blob)
+        setRecordingDuration(currentDuration)
         setState('processing')
         try {
             const arrayBuffer = await blob.arrayBuffer()
             const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
             if (result.success && result.text) {
-                window.electronAPI.injectText(result.text.trim())
-                setPreservedBlob(null) // Clear preserved blob after successful submission
+                const trimmedText = result.text.trim()
+                // Show text editor modal instead of directly injecting
+                setPendingText(trimmedText)
+                setShowTextEditor(true)
+                setState('idle')
             } else {
                 // Show error in toast, preserve recording data for retry
                 showToast(result.error || 'Transcription error', 'error')
@@ -90,7 +103,31 @@ export function OverlayView() {
             showToast('API connection error', 'error')
             setState('idle')
         }
-    }, [stopRecording, language, showToast])
+    }, [stopRecording, duration, language, showToast])
+
+    // Handle text editor confirmation
+    const handleTextEditorConfirm = useCallback((editedText: string) => {
+        if (editedText) {
+            // Save to transcription history
+            addToHistory({
+                duration: recordingDuration,
+                language: language,
+                originalText: pendingText,
+                finalText: editedText !== pendingText ? editedText : undefined,
+                wordCount: editedText.split(/\s+/).filter(Boolean).length,
+            })
+            window.electronAPI.injectText(editedText)
+        }
+        setShowTextEditor(false)
+        setPendingText('')
+        setRecordingDuration(0)
+        setPreservedBlob(null)
+    }, [recordingDuration, language, pendingText])
+
+    const handleTextEditorCancel = useCallback(() => {
+        setShowTextEditor(false)
+        setPendingText('')
+    }, [])
 
     // Retry transcription with preserved recording data
     const handleRetryTranscription = useCallback(async () => {
@@ -101,8 +138,11 @@ export function OverlayView() {
             const arrayBuffer = await preservedBlob.arrayBuffer()
             const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
             if (result.success && result.text) {
-                window.electronAPI.injectText(result.text.trim())
-                setPreservedBlob(null)
+                const trimmedText = result.text.trim()
+                // Show text editor modal instead of directly injecting
+                setPendingText(trimmedText)
+                setShowTextEditor(true)
+                setState('idle')
             } else {
                 showToast(result.error || 'Transcription error', 'error')
                 setState('idle')
@@ -116,6 +156,7 @@ export function OverlayView() {
     useEffect(() => {
         window.electronAPI.getConfig().then((config) => {
             if (config.language) setLanguage(config.language)
+            if (config.audioDeviceId) setAudioDeviceId(config.audioDeviceId)
         })
 
         const cleanupToggle = window.electronAPI.onToggleRecording((shouldRecord: boolean) => {
@@ -239,6 +280,14 @@ export function OverlayView() {
                     </svg>
                 </button>
             </div>
+
+            {/* Text Editor Modal */}
+            <TextEditorModal
+                isOpen={showTextEditor}
+                initialText={pendingText}
+                onConfirm={handleTextEditorConfirm}
+                onCancel={handleTextEditorCancel}
+            />
         </div>
     )
 }

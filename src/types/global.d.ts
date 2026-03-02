@@ -9,6 +9,15 @@ interface AppConfig {
   startWithWindows: boolean
   hotkey: string
   hasEnvKey?: boolean
+  // Punctuation & Formatting Settings
+  punctuationSettings?: {
+    autoCapitalize: boolean
+    addPeriodAtEnd: boolean
+    removeFillerWords: boolean
+    numberFormatting: 'none' | 'digits' | 'words'
+  }
+  showTextEditor?: boolean
+  audioDeviceId?: string
 }
 
 // Performance monitoring types

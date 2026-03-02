@@ -55,6 +55,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('close-settings')
   },
 
+  closeHistory: () => {
+    ipcRenderer.send('close-history')
+  },
+
+  setHistoryPinned: (pinned: boolean) => {
+    return ipcRenderer.invoke('set-history-pinned', pinned)
+  },
+
   // Performance monitoring APIs
   getPerformanceSummary: () => {
     return ipcRenderer.invoke('get-performance-summary')

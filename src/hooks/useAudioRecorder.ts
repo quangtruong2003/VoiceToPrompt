@@ -1,31 +1,42 @@
 import { useState, useRef, useCallback } from 'react'
 
+interface UseAudioRecorderOptions {
+  deviceId?: string
+}
+
 interface UseAudioRecorderReturn {
   isRecording: boolean
   duration: number
-  startRecording: () => Promise<void>
+  startRecording: (deviceId?: string) => Promise<void>
   stopRecording: () => Promise<Blob | null>
 }
 
-export function useAudioRecorder(): UseAudioRecorderReturn {
+export function useAudioRecorder(options?: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [isRecording, setIsRecording] = useState(false)
   const [duration, setDuration] = useState(0)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (deviceId?: string) => {
     try {
       chunksRef.current = []
       setDuration(0)
 
+      const audioConstraints: MediaStreamConstraints['audio'] = {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+      }
+
+      // Use specific device if provided
+      if (deviceId || options?.deviceId) {
+        (audioConstraints as any).deviceId = { exact: deviceId || options?.deviceId }
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: audioConstraints,
       })
 
       const mediaRecorder = new MediaRecorder(stream, {
