@@ -145,6 +145,7 @@ export function RecorderOverlay() {
     }, [preservedBlob, language, showToast])
 
     useEffect(() => {
+        if (!window.electronAPI) return
         window.electronAPI.getConfig().then((config) => {
             if (config.apiKey) setApiKey(config.apiKey)
             if (config.language) setLanguage(config.language)

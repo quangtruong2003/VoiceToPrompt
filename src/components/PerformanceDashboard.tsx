@@ -237,6 +237,7 @@ export function PerformanceDashboard() {
 
   // Fetch metrics periodically
   const fetchMetrics = useCallback(async () => {
+    if (!window.electronAPI) return
     try {
       const [optStatus, latMetrics, sum, calls] = await Promise.all([
         window.electronAPI.getOptimizationStatus(),
@@ -261,6 +262,7 @@ export function PerformanceDashboard() {
   }, [fetchMetrics])
 
   const handleOptimizationToggle = async (key: keyof typeof isEnabled, enabled: boolean) => {
+    if (!window.electronAPI) return
     const newState = { ...isEnabled, [key]: enabled }
     setIsEnabled(newState)
     await window.electronAPI.setOptimizationFeatures(newState)
@@ -268,11 +270,13 @@ export function PerformanceDashboard() {
   }
 
   const handleReset = async () => {
+    if (!window.electronAPI) return
     await window.electronAPI.resetPerformanceMetrics()
     await fetchMetrics()
   }
 
   const handleViewTrace = async (callId: string) => {
+    if (!window.electronAPI) return
     const trace = await window.electronAPI.getExecutionTrace(callId)
     setSelectedCall(trace)
   }

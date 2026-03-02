@@ -154,6 +154,7 @@ export function OverlayView() {
     }, [preservedBlob, language, showToast])
 
     useEffect(() => {
+        if (!window.electronAPI) return
         window.electronAPI.getConfig().then((config) => {
             if (config.language) setLanguage(config.language)
             if (config.audioDeviceId) setAudioDeviceId(config.audioDeviceId)

@@ -46,6 +46,7 @@ export function HistoryView({ onClose }: HistoryViewProps) {
   }
 
   const handlePinToggle = async () => {
+    if (!window.electronAPI) return
     const newPinned = !isPinned
     setIsPinned(newPinned)
     await window.electronAPI.setHistoryPinned(newPinned)
@@ -54,7 +55,7 @@ export function HistoryView({ onClose }: HistoryViewProps) {
   const handleClose = () => {
     if (onClose) {
       onClose()
-    } else {
+    } else if (window.electronAPI) {
       window.electronAPI.closeHistory()
     }
   }
