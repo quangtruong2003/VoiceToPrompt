@@ -12,8 +12,7 @@ publish:
   provider: github
   owner: quangtruong2003
   repo: VoiceToText
-  # Disable auto publish - we'll use GitHub Actions to upload releases
-  releaseType: none
+  releaseType: null
 nsisWeb:
   oneClick: false
   perMachine: false
