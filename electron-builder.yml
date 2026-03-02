@@ -8,6 +8,7 @@ win:
   target:
     - nsis-web
   icon: public/icon.png
+publish: null
 nsisWeb:
   oneClick: false
   perMachine: false
