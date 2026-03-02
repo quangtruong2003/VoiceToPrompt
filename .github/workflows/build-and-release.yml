@@ -48,20 +48,26 @@ jobs:
       - name: Build the application
         run: npm run build
 
-      - name: Find NSIS web file
-        id: find-file
+      - name: Find release files
+        id: find-files
         run: |
-          $file = Get-ChildItem -Path release -Filter "*.nsis.7z" -Recurse | Select-Object -First 1
-          if ($file) {
-            Write-Output "file_path=$($file.FullName)" >> $env:GITHUB_OUTPUT
-            Write-Output "Found: $($file.Name)"
-          } else {
-            Write-Output "file_path=" >> $env:GITHUB_OUTPUT
-            Write-Output "No .nsis.7z file found"
+          $nsis7z = Get-ChildItem -Path release -Filter "*.nsis.7z" -Recurse | Select-Object -First 1
+          $exe = Get-ChildItem -Path release -Filter "*.exe" -Recurse | Where-Object { $_.Name -notlike "*uninstaller*" } | Select-Object -First 1
+          
+          $files = ""
+          if ($nsis7z) {
+            Write-Output "Found NSIS: $($nsis7z.Name)"
+            $files += "$($nsis7z.FullName)"
           }
+          if ($exe) {
+            Write-Output "Found EXE: $($exe.Name)"
+            if ($files) { $files += "`n" }
+            $files += "$($exe.FullName)"
+          }
+          Write-Output "files=$files" >> $env:GITHUB_OUTPUT
 
       - name: Upload Release Asset
-        if: steps.find-file.outputs.file_path != ''
+        if: steps.find-files.outputs.files != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.increment.outputs.new_version }}
@@ -71,14 +77,14 @@ jobs:
             Auto-generated release from commit ${{ github.sha }}
             
             **Version:** ${{ steps.increment.outputs.new_version }}
-            **Download:** voice-to-text-${{ steps.increment.outputs.new_version }}-x64.nsis.7z
-          files: ${{ steps.find-file.outputs.file_path }}
+          files: |
+            ${{ steps.find-files.outputs.files }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit version bump
-        if: steps.find-file.outputs.file_path != ''
+        if: steps.find-files.outputs.files != ''
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
