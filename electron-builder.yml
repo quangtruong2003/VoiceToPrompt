@@ -8,11 +8,6 @@ win:
   target:
     - nsis-web
   icon: public/icon.png
-publish:
-  provider: github
-  owner: quangtruong2003
-  repo: VoiceToText
-  releaseType: null
 nsisWeb:
   oneClick: false
   perMachine: false
