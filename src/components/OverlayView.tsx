@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
-import { TextEditorModal } from './TextEditorModal'
 import { addToHistory } from '../lib/transcription-history'
 
 const LANGUAGES = [
@@ -48,9 +47,7 @@ export function OverlayView() {
     const [error, setError] = useState<string | null>(null)
     const [isVisible, setIsVisible] = useState(false)
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
-    // Text editor modal state
-    const [showTextEditor, setShowTextEditor] = useState(false)
-    const [pendingText, setPendingText] = useState('')
+
     const [recordingDuration, setRecordingDuration] = useState(0)
     // Preserve recording data during API errors
     const [preservedBlob, setPreservedBlob] = useState<Blob | null>(null)
@@ -89,14 +86,17 @@ export function OverlayView() {
             const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
             if (result.success && result.text) {
                 const trimmedText = result.text.trim()
-                // Show text editor modal instead of directly injecting
-                setPendingText(trimmedText)
-                setShowTextEditor(true)
+                addToHistory({
+                    duration: currentDuration,
+                    language: language,
+                    originalText: trimmedText,
+                    wordCount: trimmedText.split(/\s+/).filter(Boolean).length,
+                })
+                window.electronAPI.injectText(trimmedText)
+                setPreservedBlob(null)
                 setState('idle')
             } else {
-                // Show error in toast, preserve recording data for retry
                 showToast(result.error || 'Transcription error', 'error')
-                // Stay in idle state but keep the recording data available
                 setState('idle')
             }
         } catch {
@@ -105,29 +105,7 @@ export function OverlayView() {
         }
     }, [stopRecording, duration, language, showToast])
 
-    // Handle text editor confirmation
-    const handleTextEditorConfirm = useCallback((editedText: string) => {
-        if (editedText) {
-            // Save to transcription history
-            addToHistory({
-                duration: recordingDuration,
-                language: language,
-                originalText: pendingText,
-                finalText: editedText !== pendingText ? editedText : undefined,
-                wordCount: editedText.split(/\s+/).filter(Boolean).length,
-            })
-            window.electronAPI.injectText(editedText)
-        }
-        setShowTextEditor(false)
-        setPendingText('')
-        setRecordingDuration(0)
-        setPreservedBlob(null)
-    }, [recordingDuration, language, pendingText])
 
-    const handleTextEditorCancel = useCallback(() => {
-        setShowTextEditor(false)
-        setPendingText('')
-    }, [])
 
     // Retry transcription with preserved recording data
     const handleRetryTranscription = useCallback(async () => {
@@ -139,9 +117,14 @@ export function OverlayView() {
             const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
             if (result.success && result.text) {
                 const trimmedText = result.text.trim()
-                // Show text editor modal instead of directly injecting
-                setPendingText(trimmedText)
-                setShowTextEditor(true)
+                addToHistory({
+                    duration: recordingDuration,
+                    language: language,
+                    originalText: trimmedText,
+                    wordCount: trimmedText.split(/\s+/).filter(Boolean).length,
+                })
+                window.electronAPI.injectText(trimmedText)
+                setPreservedBlob(null)
                 setState('idle')
             } else {
                 showToast(result.error || 'Transcription error', 'error')
@@ -282,13 +265,6 @@ export function OverlayView() {
                 </button>
             </div>
 
-            {/* Text Editor Modal */}
-            <TextEditorModal
-                isOpen={showTextEditor}
-                initialText={pendingText}
-                onConfirm={handleTextEditorConfirm}
-                onCancel={handleTextEditorCancel}
-            />
         </div>
     )
 }

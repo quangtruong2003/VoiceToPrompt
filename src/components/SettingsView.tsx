@@ -171,7 +171,7 @@ export function SettingsView() {
         removeFillerWords: false,
         numberFormatting: 'none' as 'none' | 'digits' | 'words',
     })
-    const [showTextEditor, setShowTextEditor] = useState(true)
+
 
     // Audio device state
     const { devices: audioDevices, selectedDeviceId: selectedAudioDevice, isLoading: audioDevicesLoading, selectDevice: setAudioDevice, reloadDevices: reloadAudioDevices } = useAudioDevices()
@@ -196,9 +196,7 @@ export function SettingsView() {
             if (config.punctuationSettings) {
                 setPunctuationSettings(config.punctuationSettings)
             }
-            if (config.showTextEditor !== undefined) {
-                setShowTextEditor(config.showTextEditor)
-            }
+
             if (config.hotkey) {
                 const parts = config.hotkey.split('+')
                 setHotkey({
@@ -278,11 +276,7 @@ export function SettingsView() {
         showToast('Đã lưu cài đặt!', 'success')
     }
 
-    const handleShowTextEditorChange = async (enabled: boolean) => {
-        setShowTextEditor(enabled)
-        await window.electronAPI.saveConfig({ showTextEditor: enabled })
-        showToast(enabled ? 'Đã bật chỉnh sửa văn bản!' : 'Đã tắt chỉnh sửa văn bản!', 'success')
-    }
+
 
     const handleAudioDeviceChange = async (deviceId: string) => {
         setAudioDevice(deviceId)
@@ -458,7 +452,7 @@ export function SettingsView() {
                         style={{
                             transform: activeTab === 'settings' ? 'translateX(0)' :
                                 activeTab === 'api' ? 'translateX(calc(100% + 2px))' :
-                                'translateX(calc(200% + 4px))'
+                                    'translateX(calc(200% + 4px))'
                         }}
                     />
                 </div>
@@ -534,7 +528,7 @@ export function SettingsView() {
                                 </div>
                             </div>
 
-                            {/* Group 2: Khởi động & Chỉnh sửa văn bản */}
+                            {/* Group 2: Hệ thống */}
                             <div className="settings-section-group">
                                 <div className="section-header">
                                     <span className="section-icon-wrap">
@@ -562,22 +556,6 @@ export function SettingsView() {
                                         </p>
                                     </div>
 
-                                    <div className="settings-section">
-                                        <div className="toggle-setting">
-                                            <span className="toggle-label">Chỉnh sửa văn bản trước khi paste</span>
-                                            <button
-                                                className={`toggle-switch ${showTextEditor ? 'active' : ''}`}
-                                                onClick={() => handleShowTextEditorChange(!showTextEditor)}
-                                                role="switch"
-                                                aria-checked={showTextEditor}
-                                            >
-                                                <span className="toggle-slider" />
-                                            </button>
-                                        </div>
-                                        <p className="settings-hint">
-                                            Hiện modal chỉnh sửa văn bản sau khi transcription
-                                        </p>
-                                    </div>
                                 </div>
                             </div>
 

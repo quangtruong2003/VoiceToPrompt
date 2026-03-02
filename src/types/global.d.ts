@@ -16,7 +16,7 @@ interface AppConfig {
     removeFillerWords: boolean
     numberFormatting: 'none' | 'digits' | 'words'
   }
-  showTextEditor?: boolean
+
   audioDeviceId?: string
 }
 

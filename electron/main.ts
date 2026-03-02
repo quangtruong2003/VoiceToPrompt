@@ -51,7 +51,7 @@ interface AppConfig {
     removeFillerWords: boolean
     numberFormatting: 'none' | 'digits' | 'words'
   }
-  showTextEditor: boolean
+
 }
 
 // Default punctuation settings
@@ -87,7 +87,7 @@ function loadConfig(): AppConfig {
         startWithWindows: false,
         hotkey: 'Win+Alt+H',
         punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
-        showTextEditor: true,
+
         ...config
       }
     }
@@ -101,7 +101,7 @@ function loadConfig(): AppConfig {
     startWithWindows: false,
     hotkey: 'Win+Alt+H',
     punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
-    showTextEditor: true,
+
   }
 }
 
