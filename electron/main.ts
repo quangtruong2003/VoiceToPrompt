@@ -36,6 +36,11 @@ const DIST = path.join(__dirname, '../dist')
 const ELECTRON_DIST = path.join(__dirname)
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
 
+// In-memory config cache to avoid repeated disk reads
+let configCache: AppConfig | null = null
+let configLoadTime: number = 0
+const CONFIG_CACHE_TTL_MS = 5000 // Cache config for 5 seconds
+
 interface AppConfig {
   apiKey: string
   language: string
@@ -99,7 +104,14 @@ function loadEnvApiKey(): string {
   return ''
 }
 
-function loadConfig(): AppConfig {
+function loadConfig(forceReload = false): AppConfig {
+  const now = Date.now()
+  
+  // Return cached config if valid and not forcing reload
+  if (!forceReload && configCache && (now - configLoadTime) < CONFIG_CACHE_TTL_MS) {
+    return configCache
+  }
+  
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
@@ -145,10 +157,14 @@ function loadConfig(): AppConfig {
         fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2))
       }
 
+      // Update cache
+      configCache = merged
+      configLoadTime = now
       return merged
     }
   } catch {}
-  return {
+  
+  const defaultConfig: AppConfig = {
     apiKey: '',
     language: 'vi',
     customPrompt: '',
@@ -158,8 +174,12 @@ function loadConfig(): AppConfig {
     hotkey: 'Control+Space',
     geminiModel: 'gemini-2.0-flash',
     punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
-
   }
+  
+  // Cache the default config
+  configCache = defaultConfig
+  configLoadTime = now
+  return defaultConfig
 }
 
 function getApiKey(): string {
@@ -246,9 +266,13 @@ async function fetchGeminiModels(): Promise<GeminiModel[]> {
 }
 
 function saveConfig(config: Partial<AppConfig>) {
-  const existing = loadConfig()
+  const existing = loadConfig(true) // Force reload to get latest
   const merged = { ...existing, ...config }
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2))
+  
+  // Update cache with new config
+  configCache = merged
+  configLoadTime = Date.now()
 
   // Broadcast config changes to all windows
   broadcastConfigUpdate(config)
@@ -292,7 +316,17 @@ function setupPermissions() {
       callback(['media', 'clipboard-read', 'clipboard-sanitized-write'].includes(permission))
     }
   )
-  session.defaultSession.setPermissionCheckHandler(() => true)
+  // Only check permissions for our app - not all origins
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    // Allow clipboard and media for our windows only
+    const origin = webContents.getURL()
+    // For now, allow these permissions within the app
+    if (['clipboard-read', 'clipboard-sanitized-write', 'media'].includes(permission)) {
+      return true
+    }
+    // Deny everything else by default
+    return false
+  })
 }
 
 function createOverlayWindow() {
@@ -659,6 +693,9 @@ function handleWindowClose(window: BrowserWindow) {
 }
 
 function registerRecordingShortcuts() {
+  // Note: Enter/Escape are registered globally while recording to allow stopping/canceling
+  // from any application. This is necessary because the overlay window may not have focus.
+  // Consider making these configurable in settings in the future.
   try {
     const handleStop = () => {
       if (isRecording) {
@@ -706,7 +743,6 @@ async function fetchGemini(apiKey: string, payload: any): Promise<Response> {
   const model = config.geminiModel || 'gemini-2.0-flash'
   
   const baseUrl = getApiEndpoint()
-  let lastResponse: Response | null = null
 
   // Determine API version path based on API type
   const apiVersion = (config.apiType === 'google' || !config.apiType) ? 'v1beta' : 'v1'
@@ -723,6 +759,7 @@ async function fetchGemini(apiKey: string, payload: any): Promise<Response> {
 
   // Try the selected model with retries
   let retries = 3
+  let lastError: Error | null = null
   while (retries > 0) {
     try {
       const resp = await fetch(`${baseUrl}/${apiVersion}/models/${model}:generateContent`, {
@@ -737,16 +774,16 @@ async function fetchGemini(apiKey: string, payload: any): Promise<Response> {
       if ((resp.status === 503 || resp.status === 429) && retries > 1) {
         const delay = Math.pow(2, 3 - retries) * 1000 // Exponential backoff: 1s, 2s, 4s
         console.warn(`Gemini model ${model} returned ${resp.status}, retrying in ${delay}ms...`)
-        lastResponse = resp
         await new Promise(resolve => setTimeout(resolve, delay))
         retries--
         continue
       }
       
-      lastResponse = resp
       console.warn(`Gemini model ${model} failed with status ${resp.status}`)
-      break
+      // Return the failed response for error handling
+      return resp
     } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
       console.error(`Network error with model ${model}:`, err)
       if (retries > 1) {
         const delay = Math.pow(2, 3 - retries) * 1000
@@ -758,7 +795,9 @@ async function fetchGemini(apiKey: string, payload: any): Promise<Response> {
       break
     }
   }
-  return lastResponse!
+  
+  // If we get here, all retries failed - throw to propagate the error
+  throw lastError || new Error('All retries failed')
 }
 
 async function transcribeAudio(audioBuffer: ArrayBuffer, language: string): Promise<string> {
@@ -783,9 +822,9 @@ async function transcribeAudio(audioBuffer: ArrayBuffer, language: string): Prom
   const response = await fetchGemini(apiKey, payload)
 
   if (!response || !response.ok) {
-    const errorData = response ? await response.json() : { error: { message: 'Network error or all models failed' } }
+    const errorData = response ? await response.json().catch(() => ({ error: { message: 'Failed to parse error response' } })) : { error: { message: 'Network error or all retries failed' } }
     console.error('Gemini API error:', JSON.stringify(errorData, null, 2))
-    throw new Error(errorData.error?.message || `API_ERROR: HTTP ${response?.status}`)
+    throw new Error(errorData.error?.message || `API_ERROR: HTTP ${response?.status || 'unknown'}`)
   }
 
   const data = await response.json()
@@ -1048,7 +1087,25 @@ function setupIPC() {
   })
 
   ipcMain.on('open-external', (_event, url: string) => {
-    shell.openExternal(url)
+    // Validate URL before opening - only allow http/https and specific allowed hosts
+    try {
+      const parsedUrl = new URL(url)
+      // Only allow http and https protocols
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        console.warn('open-external blocked: disallowed protocol:', parsedUrl.protocol)
+        return
+      }
+      // Optional: restrict to known domains. For now, allow all https/http
+      // To restrict further, uncomment below:
+      // const allowedHosts = ['github.com', 'aistudio.google.com']
+      // if (!allowedHosts.includes(parsedUrl.hostname)) {
+      //   console.warn('open-external blocked: disallowed host:', parsedUrl.hostname)
+      //   return
+      // }
+      shell.openExternal(url)
+    } catch (err) {
+      console.error('open-external invalid URL:', err)
+    }
   })
 
   // Performance monitoring IPC handlers

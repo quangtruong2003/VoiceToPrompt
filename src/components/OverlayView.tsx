@@ -65,17 +65,17 @@ export function OverlayView() {
             setIsVisible(true)
             await startRecording()
         } catch {
-            showToast('Microphone access error', 'error')
+            showToast(t('overlay.microphoneAccessError'), 'error')
             setState('idle')
         }
-    }, [startRecording, showToast])
+    }, [startRecording, showToast, t])
 
     const handleStopAndTranscribe = useCallback(async () => {
         const blob = await stopRecording()
         // Capture duration before resetting
         const currentDuration = duration
         if (!blob || blob.size < 1000) {
-            showToast('No audio detected', 'error')
+            showToast(t('overlay.noAudioDetected'), 'error')
             setState('idle')
             return
         }
@@ -98,14 +98,14 @@ export function OverlayView() {
                 setPreservedBlob(null)
                 setState('idle')
             } else {
-                showToast(result.error || 'Transcription error', 'error')
+                showToast(result.error || t('overlay.transcriptionError'), 'error')
                 setState('idle')
             }
         } catch {
-            showToast('API connection error', 'error')
+            showToast(t('overlay.apiConnectionError'), 'error')
             setState('idle')
         }
-    }, [stopRecording, duration, language, showToast])
+    }, [stopRecording, duration, language, showToast, t])
 
 
 
@@ -129,14 +129,14 @@ export function OverlayView() {
                 setPreservedBlob(null)
                 setState('idle')
             } else {
-                showToast(result.error || 'Transcription error', 'error')
+                showToast(result.error || t('overlay.transcriptionError'), 'error')
                 setState('idle')
             }
         } catch {
-            showToast('API connection error', 'error')
+            showToast(t('overlay.apiConnectionError'), 'error')
             setState('idle')
         }
-    }, [preservedBlob, language, showToast])
+    }, [preservedBlob, language, showToast, t])
 
     useEffect(() => {
         if (!window.electronAPI) return
@@ -249,18 +249,18 @@ export function OverlayView() {
 
                 <span className="mini-timer">
                     {state === 'recording' && formatDuration(duration)}
-                    {state === 'processing' && 'Processing...'}
+                    {state === 'processing' && t('overlay.processing')}
                     {state === 'idle' && (
                         preservedBlob ? (
                             <button
                                 className="mini-retry-btn"
                                 onClick={handleRetryTranscription}
-                                title="Retry transcription"
+                                title={t('overlay.retry')}
                             >
-                                Retry
+                                {t('overlay.retry')}
                             </button>
                         ) : (
-                            'Ready'
+                            t('overlay.ready')
                         )
                     )}
                 </span>

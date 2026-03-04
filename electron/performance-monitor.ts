@@ -72,6 +72,7 @@ interface ApiCallMetrics {
     caching: boolean;
     asyncProcessing: boolean;
   };
+  trace: TraceStep[];
 }
 
 interface TraceStep {

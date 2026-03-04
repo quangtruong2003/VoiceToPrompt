@@ -1,6 +1,22 @@
 /**
  * High-Performance Voice Recording & Streaming Engine
  * 
+ * ⚠️ EXPERIMENTAL / NOT CURRENTLY USED ⚠️
+ * 
+ * This module contains experimental streaming voice processing code that is NOT
+ * currently integrated into the main application. It includes:
+ * - Connection pooling and WebSocket management
+ * - Opus audio encoding (simulated)
+ * - Process priority elevation using child_process (Unix: renice/ionice, Windows: PowerShell)
+ * 
+ * WARNING: The PriorityManager uses execSync to run shell commands (renice, ionice, 
+ * taskset, PowerShell). These may fail on Windows or without elevated permissions.
+ * 
+ * To use this module:
+ * 1. Ensure proper error handling for child_process failures
+ * 2. Add proper platform checks (process.platform)
+ * 3. Make priority features opt-in via config flag
+ * 
  * Architecture Overview:
  * 
  * ┌─────────────────────────────────────────────────────────────────────────────┐

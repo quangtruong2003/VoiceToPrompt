@@ -1,12 +1,5 @@
-/**
- * Performance Dashboard Component
- * 
- * Real-time monitoring and logging framework for API performance optimization
- */
+import { useState, useEffect, useCallback, useMemo } from 'react'
 
-import { useState, useEffect, useCallback } from 'react'
-
-// Types
 interface OptimizationStatus {
   connectionPool: {
     enabled: boolean
@@ -93,141 +86,167 @@ interface ApiCall {
   }
 }
 
-interface TraceStep {
-  name: string
-  startMs: number
-  endMs: number
-  durationMs: number
-  optimizationApplied: boolean
-  optimizationType?: string
-}
-
-interface ExecutionTrace {
-  id: string
-  timestamp: number
-  optimizations: string[]
-  steps: TraceStep[]
-  totalLatencyMs: number
-}
-
-// Helper functions
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
 function formatUptime(ms: number): string {
   const seconds = Math.floor(ms / 1000)
   const minutes = Math.floor(seconds / 60)
   const hours = Math.floor(minutes / 60)
   const days = Math.floor(hours / 24)
-  
   if (days > 0) return `${days}d ${hours % 24}h`
   if (hours > 0) return `${hours}h ${minutes % 60}m`
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`
   return `${seconds}s`
 }
 
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString()
 }
 
-// Optimization Toggle Component
-function OptimizationToggle({ 
-  label, 
-  enabled, 
-  onChange 
-}: { 
-  label: string
-  enabled: boolean
-  onChange: (enabled: boolean) => void
+function MiniBarChart({ data, maxValue, color = '#6366f1', height = 60 }: {
+  data: number[],
+  maxValue: number,
+  color?: string,
+  height?: number
 }) {
   return (
-    <div className="perf-toggle">
-      <span className="perf-toggle-label">{label}</span>
-      <button 
-        className={`perf-toggle-btn ${enabled ? 'enabled' : 'disabled'}`}
-        onClick={() => onChange(!enabled)}
-      >
-        {enabled ? 'ON' : 'OFF'}
-      </button>
-    </div>
-  )
-}
-
-// Latency Bar Component
-function LatencyBar({ 
-  label, 
-  value, 
-  max, 
-  color = '#4CAF50' 
-}: { 
-  label: string
-  value: number
-  max: number
-  color?: string
-}) {
-  const percent = Math.min(100, (value / max) * 100)
-  
-  return (
-    <div className="latency-bar">
-      <div className="latency-bar-label">
-        <span>{label}</span>
-        <span>{value.toFixed(1)}ms</span>
-      </div>
-      <div className="latency-bar-track">
-        <div 
-          className="latency-bar-fill" 
-          style={{ width: `${percent}%`, backgroundColor: color }}
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: `${height}px` }}>
+      {data.map((value, idx) => (
+        <div
+          key={idx}
+          style={{
+            flex: 1,
+            height: `${Math.max(4, (value / maxValue) * 100)}%`,
+            backgroundColor: color,
+            borderRadius: '2px 2px 0 0',
+            opacity: 0.7 + (idx / data.length) * 0.3,
+            minHeight: '4px'
+          }}
+          title={`${value.toFixed(1)}ms`}
         />
-      </div>
-    </div>
-  )
-}
-
-// Trace Timeline Component
-function TraceTimeline({ trace }: { trace: ExecutionTrace | null }) {
-  if (!trace || trace.steps.length === 0) {
-    return <div className="trace-empty">No trace available</div>
-  }
-  
-  const totalDuration = trace.steps.reduce((sum, step) => sum + step.durationMs, 0) || 1
-  
-  return (
-    <div className="trace-timeline">
-      {trace.steps.map((step, idx) => (
-        <div 
-          key={idx} 
-          className={`trace-step ${step.optimizationApplied ? 'optimized' : ''}`}
-        >
-          <div className="trace-step-name">{step.name}</div>
-          <div className="trace-step-duration">
-            {step.durationMs.toFixed(1)}ms
-          </div>
-          <div 
-            className="trace-step-bar"
-            style={{ width: `${(step.durationMs / totalDuration) * 100}%` }}
-          />
-          {step.optimizationApplied && (
-            <span className="trace-step-badge">✓</span>
-          )}
-        </div>
       ))}
     </div>
   )
 }
 
-// Main Dashboard Component
+function LatencyDonutChart({
+  segments,
+  size = 120,
+  thickness = 12
+}: {
+  segments: { value: number, color: string, label: string }[],
+  size?: number,
+  thickness?: number
+}) {
+  const total = segments.reduce((sum, s) => sum + s.value, 0)
+  const radius = (size - thickness) / 2
+  const circumference = 2 * Math.PI * radius
+  let currentPercent = 0
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size}>
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={thickness}
+        />
+        {segments.map((segment, idx) => {
+          const percent = total > 0 ? segment.value / total : 0
+          const dashLength = percent * circumference
+          const dashOffset = (currentPercent / 100) * circumference
+          currentPercent += percent * 100
+          return (
+            <circle
+              key={idx}
+              cx={size / 2} cy={size / 2} r={radius}
+              fill="none" stroke={segment.color} strokeWidth={thickness}
+              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+              strokeDashoffset={-dashOffset}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              style={{ transition: 'all 0.3s ease' }}
+            />
+          )
+        })}
+      </svg>
+      <div style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)', textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          {total.toFixed(0)}ms
+        </div>
+        <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>Total</div>
+      </div>
+    </div>
+  )
+}
+
+function ApiCallDetail({ call, onClose }: { call: ApiCall, onClose: () => void }) {
+  const segments = [
+    { value: call.afterOptimization.connectionMs, color: '#2196F3', label: 'Connection' },
+    { value: call.afterOptimization.compressionMs, color: '#9C27B0', label: 'Compression' },
+    { value: call.afterOptimization.processingMs, color: '#4CAF50', label: 'Processing' },
+  ]
+
+  return (
+    <div className="perf-modal-overlay" onClick={onClose}>
+      <div className="perf-modal" onClick={e => e.stopPropagation()}>
+        <div className="perf-modal-header">
+          <h3>API Call Details</h3>
+          <button className="perf-modal-close" onClick={onClose}>x</button>
+        </div>
+        <div className="perf-modal-body">
+          <div className="perf-detail-grid">
+            <div className="perf-detail-item">
+              <span className="perf-detail-label">Endpoint</span>
+              <span className="perf-detail-value">{call.endpoint}</span>
+            </div>
+            <div className="perf-detail-item">
+              <span className="perf-detail-label">Method</span>
+              <span className="perf-detail-value method">{call.method}</span>
+            </div>
+            <div className="perf-detail-item">
+              <span className="perf-detail-label">Status</span>
+              <span className={`perf-detail-value status ${call.status >= 200 && call.status < 300 ? 'success' : 'error'}`}>
+                {call.status}
+              </span>
+            </div>
+            <div className="perf-detail-item">
+              <span className="perf-detail-label">Time</span>
+              <span className="perf-detail-value">{formatTime(call.timestamp)}</span>
+            </div>
+          </div>
+          <div className="perf-detail-chart">
+            <h4>Latency Breakdown</h4>
+            <LatencyDonutChart segments={segments} />
+          </div>
+          <div className="perf-detail-legend">
+            {segments.map((s, i) => (
+              <div key={i} className="perf-legend-item">
+                <span className="perf-legend-dot" style={{ backgroundColor: s.color }} />
+                <span>{s.label}: {s.value.toFixed(1)}ms</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PerformanceDashboard() {
-  const [isExpanded, setIsExpanded] = useState(false)
   const [optimizationStatus, setOptimizationStatus] = useState<OptimizationStatus | null>(null)
   const [latencyMetrics, setLatencyMetrics] = useState<LatencyMetrics | null>(null)
   const [summary, setSummary] = useState<PerformanceSummary | null>(null)
   const [apiCalls, setApiCalls] = useState<ApiCall[]>([])
-  const [selectedCall, setSelectedCall] = useState<ExecutionTrace | null>(null)
+  const [selectedCall, setSelectedCall] = useState<ApiCall | null>(null)
   const [isEnabled, setIsEnabled] = useState({
     connectionPool: true,
     compression: true,
@@ -235,7 +254,10 @@ export function PerformanceDashboard() {
     asyncProcessing: true
   })
 
-  // Fetch metrics periodically
+  const chartData = useMemo(() => {
+    return apiCalls.slice(-20).map(c => c.afterOptimization.totalMs)
+  }, [apiCalls])
+
   const fetchMetrics = useCallback(async () => {
     if (!window.electronAPI) return
     try {
@@ -243,9 +265,8 @@ export function PerformanceDashboard() {
         window.electronAPI.getOptimizationStatus(),
         window.electronAPI.getLatencyMetrics(),
         window.electronAPI.getPerformanceSummary(),
-        window.electronAPI.getApiCalls(10)
+        window.electronAPI.getApiCalls(50)
       ])
-      
       setOptimizationStatus(optStatus)
       setLatencyMetrics(latMetrics)
       setSummary(sum)
@@ -257,7 +278,7 @@ export function PerformanceDashboard() {
 
   useEffect(() => {
     fetchMetrics()
-    const interval = setInterval(fetchMetrics, 2000)
+    const interval = setInterval(fetchMetrics, 3000)
     return () => clearInterval(interval)
   }, [fetchMetrics])
 
@@ -275,240 +296,252 @@ export function PerformanceDashboard() {
     await fetchMetrics()
   }
 
-  const handleViewTrace = async (callId: string) => {
-    if (!window.electronAPI) return
-    const trace = await window.electronAPI.getExecutionTrace(callId)
-    setSelectedCall(trace)
-  }
+  const latencySegments = latencyMetrics ? [
+    { value: latencyMetrics.connectionLatencyMs, color: '#2196F3', label: 'Connection' },
+    { value: latencyMetrics.tlsHandshakeMs, color: '#9C27B0', label: 'TLS' },
+    { value: latencyMetrics.requestLatencyMs, color: '#FF9800', label: 'Request' },
+    { value: latencyMetrics.responseLatencyMs, color: '#E91E63', label: 'Response' },
+    { value: latencyMetrics.processingLatencyMs, color: '#4CAF50', label: 'Processing' },
+  ] : []
 
-  if (!isExpanded) {
-    return (
-      <button className="perf-dashboard-collapsed" onClick={() => setIsExpanded(true)}>
-        <span className="perf-icon">📊</span>
-        <span className="perf-label">Performance</span>
-        {latencyMetrics && latencyMetrics.savingsPercent > 0 && (
-          <span className="perf-badge">{latencyMetrics.savingsPercent.toFixed(0)}% ↓</span>
-        )}
-      </button>
-    )
-  }
+  const successRate = summary && summary.totalRequests > 0
+    ? ((summary.successfulRequests / summary.totalRequests) * 100).toFixed(1)
+    : '0'
 
   return (
-    <div className="perf-dashboard">
-      <div className="perf-header">
-        <h3>📊 Performance Monitor</h3>
-        <button className="perf-close" onClick={() => setIsExpanded(false)}>×</button>
-      </div>
+    <div className="settings-content-panel">
+      <h2 className="content-panel-title">Performance</h2>
 
-      {/* Latency Comparison */}
-      <div className="perf-section">
-        <h4>Latency Comparison</h4>
-        {latencyMetrics && (
-          <div className="latency-comparison">
-            <div className="latency-before">
-              <span className="latency-label">Before (Baseline)</span>
-              <span className="latency-value">{latencyMetrics.baselineLatencyMs.toFixed(0)}ms</span>
+      {/* Overview Stats - 2x2 grid */}
+      <div className="list-grouped-card">
+        <div className="list-grouped-item" style={{ borderBottom: '1px solid var(--border-section)' }}>
+          <div className="list-item-left" style={{ flex: '0 0 auto' }}>
+            <span className="list-item-label">Overview</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span className="list-item-hint">Uptime: {summary ? formatUptime(summary.uptime) : '--'}</span>
+          </div>
+        </div>
+        <div className="list-grouped-item no-border">
+          <div className="perf-overview-grid">
+            <div className="perf-overview-item">
+              <div className="perf-overview-icon" style={{ color: 'var(--accent)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+              </div>
+              <div className="perf-overview-value" style={{ color: 'var(--accent)' }}>{summary?.totalRequests || 0}</div>
+              <div className="perf-overview-label">Total Requests</div>
             </div>
-            <div className="latency-arrow">→</div>
-            <div className="latency-after">
-              <span className="latency-label">After (Optimized)</span>
-              <span className="latency-value optimized">{latencyMetrics.totalLatencyMs.toFixed(0)}ms</span>
+            <div className="perf-overview-item">
+              <div className="perf-overview-icon" style={{ color: 'var(--success)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
+              </div>
+              <div className="perf-overview-value" style={{ color: 'var(--success)' }}>{successRate}%</div>
+              <div className="perf-overview-label">Success Rate</div>
             </div>
-            <div className="latency-savings">
-              <span className="savings-value">{latencyMetrics.savingsPercent.toFixed(1)}%</span>
-              <span className="savings-label">FASTER</span>
+            <div className="perf-overview-item">
+              <div className="perf-overview-icon" style={{ color: 'var(--warning)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              </div>
+              <div className="perf-overview-value" style={{ color: 'var(--warning)' }}>{latencyMetrics?.totalLatencyMs.toFixed(0) || 0}<span className="perf-overview-unit">ms</span></div>
+              <div className="perf-overview-label">Avg Latency</div>
+            </div>
+            <div className="perf-overview-item">
+              <div className="perf-overview-icon" style={{ color: '#4CAF50' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-10h-9l1-8z" /></svg>
+              </div>
+              <div className="perf-overview-value" style={{ color: '#4CAF50' }}>{latencyMetrics?.savingsPercent.toFixed(0) || 0}<span className="perf-overview-unit">%</span></div>
+              <div className="perf-overview-label">Time Saved</div>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Latency Breakdown */}
-      <div className="perf-section">
-        <h4>Latency Breakdown</h4>
-        {latencyMetrics && (
-          <div className="latency-breakdown">
-            <LatencyBar 
-              label="Connection" 
-              value={latencyMetrics.connectionLatencyMs} 
-              max={latencyMetrics.baselineLatencyMs}
-              color="#2196F3"
-            />
-            <LatencyBar 
-              label="DNS/TLS" 
-              value={latencyMetrics.tlsHandshakeMs} 
-              max={latencyMetrics.baselineLatencyMs}
-              color="#9C27B0"
-            />
-            <LatencyBar 
-              label="Request" 
-              value={latencyMetrics.requestLatencyMs} 
-              max={latencyMetrics.baselineLatencyMs}
-              color="#FF9800"
-            />
-            <LatencyBar 
-              label="Response" 
-              value={latencyMetrics.responseLatencyMs} 
-              max={latencyMetrics.baselineLatencyMs}
-              color="#E91E63"
-            />
-            <LatencyBar 
-              label="Processing" 
-              value={latencyMetrics.processingLatencyMs} 
-              max={latencyMetrics.baselineLatencyMs}
-              color="#4CAF50"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Optimization Status */}
-      <div className="perf-section">
-        <h4>Optimization Features</h4>
-        <div className="optimization-toggles">
-          <OptimizationToggle 
-            label="🔗 Connection Pool"
-            enabled={isEnabled.connectionPool}
-            onChange={(v) => handleOptimizationToggle('connectionPool', v)}
-          />
-          <OptimizationToggle 
-            label="📦 Compression"
-            enabled={isEnabled.compression}
-            onChange={(v) => handleOptimizationToggle('compression', v)}
-          />
-          <OptimizationToggle 
-            label="💾 Caching"
-            enabled={isEnabled.caching}
-            onChange={(v) => handleOptimizationToggle('caching', v)}
-          />
-          <OptimizationToggle 
-            label="⚡ Async Processing"
-            enabled={isEnabled.asyncProcessing}
-            onChange={(v) => handleOptimizationToggle('asyncProcessing', v)}
-          />
         </div>
       </div>
 
-      {/* Optimization Stats */}
-      <div className="perf-section">
-        <h4>Optimization Statistics</h4>
-        {optimizationStatus && (
-          <div className="optimization-stats">
-            <div className="stat-item">
-              <span className="stat-label">Connection Reuse</span>
-              <span className="stat-value">
-                {optimizationStatus.connectionPool.reuseRatio.toFixed(1)}%
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Compression Ratio</span>
-              <span className="stat-value">
-                {optimizationStatus.compression.compressionRatio.toFixed(1)}%
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Cache Hit Rate</span>
-              <span className="stat-value">
-                {optimizationStatus.caching.hitRatio.toFixed(1)}%
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Total Requests</span>
-              <span className="stat-value">
-                {optimizationStatus.connectionPool.totalRequests}
-              </span>
-            </div>
+      {/* Latency Analysis */}
+      <div className="list-grouped-card">
+        <div className="list-grouped-item">
+          <div className="list-item-left" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+            <span className="list-item-label">Latency Analysis</span>
           </div>
-        )}
-      </div>
-
-      {/* Recent API Calls */}
-      <div className="perf-section">
-        <h4>Recent API Calls</h4>
-        <div className="api-calls-list">
-          {apiCalls.length === 0 ? (
-            <div className="api-calls-empty">No API calls yet</div>
-          ) : (
-            apiCalls.map(call => (
-              <div 
-                key={call.id} 
-                className="api-call-item"
-                onClick={() => handleViewTrace(call.id)}
-              >
-                <div className="api-call-info">
-                  <span className="api-call-method">{call.method}</span>
-                  <span className="api-call-endpoint">{call.endpoint}</span>
-                </div>
-                <div className="api-call-metrics">
-                  <span className={`api-call-status ${call.status >= 200 && call.status < 300 ? 'success' : 'error'}`}>
-                    {call.status || 'pending'}
-                  </span>
-                  <span className="api-call-latency">
-                    {call.afterOptimization.totalMs.toFixed(0)}ms
-                  </span>
-                </div>
-                <div className="api-call-optimizations">
-                  {call.optimizations.connectionPool && <span className="opt-badge">🔗</span>}
-                  {call.optimizations.compression && <span className="opt-badge">📦</span>}
-                  {call.optimizations.caching && <span className="opt-badge">💾</span>}
-                  {call.optimizations.asyncProcessing && <span className="opt-badge">⚡</span>}
-                </div>
+        </div>
+        <div className="list-grouped-item no-border">
+          {latencyMetrics ? (
+            <div className="perf-latency-layout">
+              <div className="perf-latency-chart-wrap">
+                <LatencyDonutChart segments={latencySegments} size={130} thickness={13} />
               </div>
-            ))
+              <div className="perf-latency-details">
+                {latencySegments.map((seg, idx) => (
+                  <div key={idx} className="perf-latency-row">
+                    <span className="perf-latency-dot" style={{ backgroundColor: seg.color }} />
+                    <span className="perf-latency-name">{seg.label}</span>
+                    <span className="perf-latency-ms">{seg.value.toFixed(1)}ms</span>
+                    <div className="perf-latency-bar-bg">
+                      <div
+                        className="perf-latency-bar-fill"
+                        style={{
+                          width: `${latencyMetrics.baselineLatencyMs > 0 ? (seg.value / latencyMetrics.baselineLatencyMs) * 100 : 0}%`,
+                          backgroundColor: seg.color
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="perf-empty-state">No latency data yet</div>
           )}
         </div>
       </div>
 
-      {/* Execution Trace */}
-      {selectedCall && (
-        <div className="perf-section">
-          <h4>Execution Trace</h4>
-          <TraceTimeline trace={selectedCall} />
-          <div className="trace-optimizations">
-            <span>Applied: </span>
-            {selectedCall.optimizations.map(opt => (
-              <span key={opt} className="trace-opt-badge">{opt}</span>
-            ))}
+      {/* API Usage History */}
+      <div className="list-grouped-card">
+        <div className="list-grouped-item">
+          <div className="list-item-left" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2">
+              <path d="M4 12h8M4 18V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+            </svg>
+            <span className="list-item-label">API Usage</span>
+          </div>
+          <span className="list-item-hint">{chartData.length} requests</span>
+        </div>
+
+        {chartData.length > 0 && (
+          <div className="list-grouped-item" style={{ flexDirection: 'column', gap: 6 }}>
+            <MiniBarChart
+              data={chartData}
+              maxValue={Math.max(...chartData, 100)}
+              color="var(--accent)"
+              height={70}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-dim)', width: '100%' }}>
+              <span>Last {chartData.length} requests</span>
+              <span>Latency (ms)</span>
+            </div>
+          </div>
+        )}
+
+        <div className="list-grouped-item no-border" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          {apiCalls.length === 0 ? (
+            <div className="perf-empty-state">No API calls recorded</div>
+          ) : (
+            <div className="perf-api-list-compact">
+              {apiCalls.slice(0, 6).map(call => (
+                <div
+                  key={call.id}
+                  className="perf-api-row"
+                  onClick={() => setSelectedCall(call)}
+                >
+                  <span className="perf-api-method-badge">{call.method}</span>
+                  <span className="perf-api-endpoint-text">{call.endpoint.split('/').pop()}</span>
+                  <span className={`perf-api-status-dot ${call.status >= 200 && call.status < 300 ? 'success' : 'error'}`}>
+                    {call.status || '...'}
+                  </span>
+                  <span className="perf-api-latency-text">{call.afterOptimization.totalMs.toFixed(0)}ms</span>
+                  <span className="perf-api-time-text">{formatTimeAgo(call.timestamp)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Optimization Features */}
+      <div className="list-grouped-card">
+        <div className="list-grouped-item">
+          <div className="list-item-left" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            <span className="list-item-label">Optimization Features</span>
+          </div>
+        </div>
+
+        {[
+          { key: 'connectionPool' as const, label: 'Connection Pool', hint: 'Reuse HTTP connections to reduce latency' },
+          { key: 'compression' as const, label: 'Compression', hint: 'Compress request/response data' },
+          { key: 'caching' as const, label: 'Caching', hint: 'Cache API responses for repeated requests' },
+          { key: 'asyncProcessing' as const, label: 'Async Processing', hint: 'Process requests asynchronously' },
+        ].map((opt, idx, arr) => (
+          <div key={opt.key} className={`list-grouped-item ${idx === arr.length - 1 ? 'no-border' : ''}`}>
+            <div className="list-item-left">
+              <span className="list-item-label">{opt.label}</span>
+              <span className="list-item-hint">{opt.hint}</span>
+            </div>
+            <button
+              className={`toggle-switch ${isEnabled[opt.key] ? 'active' : ''}`}
+              onClick={() => handleOptimizationToggle(opt.key, !isEnabled[opt.key])}
+              role="switch"
+              aria-checked={isEnabled[opt.key]}
+            >
+              <span className="toggle-slider" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Optimization Statistics */}
+      {optimizationStatus && (
+        <div className="list-grouped-card">
+          <div className="list-grouped-item">
+            <div className="list-item-left" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="2">
+                <path d="M18 20V10M12 20V4M6 20v-6" />
+              </svg>
+              <span className="list-item-label">Statistics</span>
+            </div>
+          </div>
+          <div className="list-grouped-item no-border">
+            <div className="perf-stats-compact">
+              <div className="perf-stat-mini">
+                <div className="perf-stat-mini-value">{optimizationStatus.connectionPool.reuseRatio.toFixed(1)}%</div>
+                <div className="perf-stat-mini-label">Connection Reuse</div>
+                <div className="perf-stat-mini-bar">
+                  <div style={{ width: `${optimizationStatus.connectionPool.reuseRatio}%`, backgroundColor: '#2196F3' }} />
+                </div>
+              </div>
+              <div className="perf-stat-mini">
+                <div className="perf-stat-mini-value">{optimizationStatus.compression.compressionRatio.toFixed(1)}%</div>
+                <div className="perf-stat-mini-label">Compression Ratio</div>
+                <div className="perf-stat-mini-bar">
+                  <div style={{ width: `${Math.min(100, optimizationStatus.compression.compressionRatio)}%`, backgroundColor: '#9C27B0' }} />
+                </div>
+              </div>
+              <div className="perf-stat-mini">
+                <div className="perf-stat-mini-value">{optimizationStatus.caching.hitRatio.toFixed(1)}%</div>
+                <div className="perf-stat-mini-label">Cache Hit Rate</div>
+                <div className="perf-stat-mini-bar">
+                  <div style={{ width: `${optimizationStatus.caching.hitRatio}%`, backgroundColor: '#4CAF50' }} />
+                </div>
+              </div>
+              <div className="perf-stat-mini">
+                <div className="perf-stat-mini-value">{optimizationStatus.connectionPool.totalRequests}</div>
+                <div className="perf-stat-mini-label">Total Processed</div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Summary Stats */}
-      <div className="perf-section">
-        <h4>Session Summary</h4>
-        {summary && (
-          <div className="summary-stats">
-            <div className="summary-item">
-              <span className="summary-label">Uptime</span>
-              <span className="summary-value">{formatUptime(summary.uptime)}</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Total Requests</span>
-              <span className="summary-value">{summary.totalRequests}</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Success Rate</span>
-              <span className="summary-value">
-                {summary.totalRequests > 0 
-                  ? ((summary.successfulRequests / summary.totalRequests) * 100).toFixed(1)
-                  : 0}%
-              </span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Avg Savings</span>
-              <span className="summary-value">
-                {summary.averageSavingsMs.toFixed(0)}ms ({summary.averageSavingsPercent.toFixed(1)}%)
-              </span>
-            </div>
-          </div>
-        )}
+      {/* Reset */}
+      <div className="list-grouped-card">
+        <div className="list-grouped-item no-border" style={{ justifyContent: 'center' }}>
+          <button className="btn btn-ghost" onClick={handleReset} style={{ width: '100%', justifyContent: 'center' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 4v6h-6M1 20v-6h6" />
+            </svg>
+            Reset Metrics
+          </button>
+        </div>
       </div>
 
-      {/* Reset Button */}
-      <div className="perf-footer">
-        <button className="perf-reset-btn" onClick={handleReset}>
-          Reset Metrics
-        </button>
-      </div>
+      {selectedCall && (
+        <ApiCallDetail call={selectedCall} onClose={() => setSelectedCall(null)} />
+      )}
     </div>
   )
 }

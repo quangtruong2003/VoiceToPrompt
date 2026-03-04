@@ -878,12 +878,7 @@ export function SettingsView() {
                 )
 
             case 'performance':
-                return (
-                    <div className="settings-content-panel">
-                        <h2 className="content-panel-title">{t('settings.sections.performance')}</h2>
-                        <PerformanceDashboard />
-                    </div>
-                )
+                return <PerformanceDashboard />
 
             case 'about':
                 return (
