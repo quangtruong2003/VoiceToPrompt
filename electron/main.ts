@@ -456,8 +456,8 @@ function createHistoryWindow() {
   const bounds = config.historyWindowBounds
 
   // Default dimensions
-  let width = 620
-  let height = 580
+  let width = 420
+  let height = 500
   let x = Math.round((screenWidth - width) / 2)
   let y = Math.round((screenHeight - height) / 2)
 
@@ -478,8 +478,8 @@ function createHistoryWindow() {
     height,
     x,
     y,
-    minWidth: 620,
-    minHeight: 500,
+    minWidth: 360,
+    minHeight: 400,
     frame: false,
     transparent: true,
     resizable: true,
