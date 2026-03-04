@@ -11,6 +11,9 @@ const LANGUAGES = [
     { code: 'zh', name: '中文', flag: '🇨🇳' },
 ]
 
+    // App version - will be loaded from config
+const GITHUB_REPO = 'quangtruong2003/voice-to-text'
+
 const API_PROVIDERS = [
     {
         id: 'google',
@@ -149,7 +152,7 @@ function Toast({ message, type, onClose }: { message: string, type: 'success' | 
 }
 
 export function SettingsView() {
-    const [activeTab, setActiveTab] = useState<'settings' | 'api' | 'performance'>('settings')
+    const [activeTab, setActiveTab] = useState<'settings' | 'api' | 'performance' | 'about'>('settings')
     const [apiKey, setApiKey] = useState('')
     const [apiKeyInput, setApiKeyInput] = useState('')
     const [customPrompt, setCustomPrompt] = useState('')
@@ -163,6 +166,11 @@ export function SettingsView() {
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
     const [showApiKey, setShowApiKey] = useState(false)
     const [startWithWindows, setStartWithWindows] = useState(false)
+    const [autoUpdate, setAutoUpdate] = useState(true)
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
+    const [updateAvailable, setUpdateAvailable] = useState(false)
+    const [lastUpdateCheck, setLastUpdateCheck] = useState<string | null>(null)
+    const [appVersion, setAppVersion] = useState<string>('')
 
     // Punctuation & formatting settings
     const [punctuationSettings, setPunctuationSettings] = useState({
@@ -176,8 +184,13 @@ export function SettingsView() {
     // Audio device state
     const { devices: audioDevices, selectedDeviceId: selectedAudioDevice, isLoading: audioDevicesLoading, selectDevice: setAudioDevice, reloadDevices: reloadAudioDevices } = useAudioDevices()
 
+    // Toast function
+    const showToast = useCallback((message: string, type: 'success' | 'error') => {
+        setToast({ message, type })
+    }, [])
+
     // Hotkey customization state
-    const [hotkey, setHotkey] = useState({ win: true, alt: true, key: 'H' })
+    const [hotkey, setHotkey] = useState({ win: false, alt: false, ctrl: true, key: 'Space' })
     const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
 
     useEffect(() => {
@@ -193,6 +206,9 @@ export function SettingsView() {
             if (config.apiType) setApiType(config.apiType)
             if (config.customEndpoint) setCustomEndpoint(config.customEndpoint)
             if (config.startWithWindows !== undefined) setStartWithWindows(config.startWithWindows)
+            if (config.autoUpdate !== undefined) setAutoUpdate(config.autoUpdate)
+            if (config.lastUpdateCheck) setLastUpdateCheck(config.lastUpdateCheck)
+            if (config.appVersion) setAppVersion(config.appVersion)
             if (config.punctuationSettings) {
                 setPunctuationSettings(config.punctuationSettings)
             }
@@ -202,7 +218,8 @@ export function SettingsView() {
                 setHotkey({
                     win: parts.includes('Win'),
                     alt: parts.includes('Alt'),
-                    key: parts.find(p => !['Win', 'Alt', 'Control', 'Ctrl', 'Shift'].includes(p)) || 'H'
+                    ctrl: parts.includes('Control'),
+                    key: parts.find(p => !['Win', 'Alt', 'Control', 'Ctrl', 'Shift'].includes(p)) || 'Space'
                 })
             }
         })
@@ -260,6 +277,30 @@ export function SettingsView() {
         }
     }
 
+    // App version for about tab
+    // App version - loaded from config (Electron)
+
+    // Check for updates
+    const checkForUpdate = useCallback(async () => {
+        setIsCheckingUpdate(true)
+        setUpdateAvailable(false)
+        try {
+            const result = await window.electronAPI.checkForUpdate()
+            if (result.updateAvailable) {
+                setUpdateAvailable(true)
+                showToast('Có bản cập nhật mới!', 'success')
+            } else {
+                showToast('Bạn đang sử dụng phiên bản mới nhất!', 'success')
+            }
+            const now = new Date()
+            setLastUpdateCheck(now.toLocaleString('vi-VN'))
+        } catch (err) {
+            showToast('Lỗi kiểm tra cập nhật', 'error')
+        } finally {
+            setIsCheckingUpdate(false)
+        }
+    }, [showToast])
+
     const handleApiTypeChange = async (newType: 'google' | 'antigravity' | 'custom') => {
         setApiType(newType)
         await window.electronAPI.saveConfig({ apiType: newType })
@@ -282,10 +323,6 @@ export function SettingsView() {
         setAudioDevice(deviceId)
         showToast('Đã chọn microphone!', 'success')
     }
-
-    const showToast = useCallback((message: string, type: 'success' | 'error') => {
-        setToast({ message, type })
-    }, [])
 
     const handleClose = () => {
         window.electronAPI.closeSettings()
@@ -331,19 +368,19 @@ export function SettingsView() {
             hotkeyParts.push('Shift')
         }
 
-        // If no modifier keys pressed, require Win key
+        // If no modifier keys pressed, require a modifier key
         if (!win && !alt && !ctrl && !shift) {
-            // Just a letter/number key - add Win by default
+            // Just a letter/number key - add Control by default
             if (MODIFIER_REQUIRED_KEYS.includes(key.toUpperCase()) || /^[0-9]$/.test(key)) {
-                hotkeyParts = ['Win', key.toUpperCase()]
+                hotkeyParts = ['Control', key.toUpperCase()]
             } else {
-                showToast('Cần có Win key (ví dụ: Win+Alt+Phím)', 'error')
+                showToast('Cần có modifier key (ví dụ: Ctrl+Space)', 'error')
                 return
             }
         } else {
-            // Check if we have at least one modifier (Win recommended)
-            if (!win && !alt) {
-                showToast('Cần có Win hoặc Alt key (tránh xung đột với phím hệ thống)', 'error')
+            // Check if we have at least one modifier (Ctrl/Win/Alt recommended)
+            if (!win && !alt && !ctrl) {
+                showToast('Cần có Ctrl, Win hoặc Alt key (tránh xung đột với phím hệ thống)', 'error')
                 return
             }
             // Add the final key
@@ -357,6 +394,7 @@ export function SettingsView() {
         setHotkey({
             win: hotkeyString.includes('Win'),
             alt: hotkeyString.includes('Alt'),
+            ctrl: hotkeyString.includes('Control'),
             key: hotkeyParts[hotkeyParts.length - 1]
         })
 
@@ -447,12 +485,22 @@ export function SettingsView() {
                         </svg>
                         <span>Hiệu năng</span>
                     </button>
+                    <button
+                        className={`settings-tab ${activeTab === 'about' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('about')}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+                        </svg>
+                        <span>Giới thiệu</span>
+                    </button>
                     <div
                         className="settings-tab-indicator"
                         style={{
                             transform: activeTab === 'settings' ? 'translateX(0)' :
                                 activeTab === 'api' ? 'translateX(calc(100% + 2px))' :
-                                    'translateX(calc(200% + 4px))'
+                                    activeTab === 'performance' ? 'translateX(calc(200% + 4px))' :
+                                        'translateX(calc(300% + 6px))'
                         }}
                     />
                 </div>
@@ -506,10 +554,18 @@ export function SettingsView() {
                                             ) : (
                                                 <div className="hotkey-display-setting">
                                                     <div className="current-hotkey">
-                                                        <kbd>Win</kbd>
-                                                        <span>+</span>
-                                                        <kbd>Alt</kbd>
-                                                        <span>+</span>
+                                                        {hotkey.ctrl && <>
+                                                            <kbd>Ctrl</kbd>
+                                                            <span>+</span>
+                                                        </>}
+                                                        {hotkey.win && <>
+                                                            <kbd>Win</kbd>
+                                                            <span>+</span>
+                                                        </>}
+                                                        {hotkey.alt && <>
+                                                            <kbd>Alt</kbd>
+                                                            <span>+</span>
+                                                        </>}
                                                         <kbd>{hotkey.key}</kbd>
                                                     </div>
                                                     <button
@@ -522,7 +578,7 @@ export function SettingsView() {
                                             )}
                                         </div>
                                         <p className="settings-hint">
-                                            Nhấn phím mới (cần có Win + Alt + phím khác)
+                                            Nhấn phím mới (cần có Ctrl/Win/Alt + phím khác)
                                         </p>
                                     </div>
                                 </div>
@@ -872,11 +928,109 @@ export function SettingsView() {
                     ) : activeTab === 'performance' ? (
                         /* Performance Tab */
                         <PerformanceDashboard />
+                    ) : activeTab === 'about' ? (
+                        /* About Tab */
+                        <div className="about-tab">
+                            <div className="about-header">
+                                <div className="about-logo">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                        <line x1="12" y1="19" x2="12" y2="23"/>
+                                        <line x1="8" y1="23" x2="16" y2="23"/>
+                                    </svg>
+                                </div>
+                                <h2>Voice to Text</h2>
+                                <p className="about-version">Phiên bản {appVersion}</p>
+                            </div>
+
+                            <div className="about-description">
+                                <p>Ứng dụng chuyển giọng nói thành văn bản sử dụng AI. Ghi âm giọng nói và chuyển đổi thành văn bản một cách nhanh chóng và chính xác.</p>
+                            </div>
+
+                            <div className="about-features">
+                                <div className="about-feature">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    <span>Hỗ trợ nhiều ngôn ngữ</span>
+                                </div>
+                                <div className="about-feature">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    <span>Tích hợp AI xử lý ngôn ngữ tự nhiên</span>
+                                </div>
+                                <div className="about-feature">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    <span>Phím tắt tùy chỉnh</span>
+                                </div>
+                                <div className="about-feature">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    <span>Tự động khởi động cùng Windows</span>
+                                </div>
+                            </div>
+
+                            <div className="about-section">
+                                <h3>Người phát triển</h3>
+                                <p>Nguyễn Quang Trường - Full Stack Developer</p>
+                                <p className="about-contact">
+                                    <a href="https://github.com/quangtruong2003" target="_blank" rel="noopener noreferrer">GitHub</a>
+                                </p>
+                            </div>
+
+                            <div className="about-section">
+                                <h3>Cập nhật tự động</h3>
+                                <div className="update-status">
+                                    <label className="toggle-label">
+                                        <span>Kiểm tra cập nhật khi khởi động</span>
+                                        <div className="toggle-switch">
+                                            <input
+                                                type="checkbox"
+                                                checked={autoUpdate}
+                                                onChange={(e) => {
+                                                    setAutoUpdate(e.target.checked)
+                                                    window.electronAPI.saveConfig({ autoUpdate: e.target.checked })
+                                                }}
+                                            />
+                                            <span className="toggle-slider"/>
+                                        </div>
+                                    </label>
+                                </div>
+                                {lastUpdateCheck && (
+                                    <p className="update-check-time">
+                                        Kiểm tra lần cuối: {lastUpdateCheck}
+                                    </p>
+                                )}
+                                <button
+                                    className="btn btn-secondary btn-small"
+                                    onClick={checkForUpdate}
+                                    disabled={isCheckingUpdate}
+                                >
+                                    {isCheckingUpdate ? 'Đang kiểm tra...' : 'Kiểm tra ngay'}
+                                </button>
+                                {updateAvailable && (
+                                    <p className="update-available">Có bản cập nhật mới!</p>
+                                )}
+                            </div>
+
+                            <div className="about-footer">
+                                <p>© 2026 Voice to Text. All rights reserved.</p>
+                            </div>
+                        </div>
                     ) : null}
                 </div>
 
                 <div className="settings-footer">
                     <div className="hotkey-display">
+                        {hotkey.ctrl && <>
+                            <kbd>Ctrl</kbd>
+                            <span className="hotkey-plus">+</span>
+                        </>}
                         {hotkey.win && <>
                             <kbd>Win</kbd>
                             <span className="hotkey-plus">+</span>

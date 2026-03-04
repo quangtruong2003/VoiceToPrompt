@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('set-start-with-windows', enabled)
   },
 
+  checkForUpdate: () => {
+    return ipcRenderer.invoke('check-for-update')
+  },
+
   registerHotkey: (hotkey: string) => {
     ipcRenderer.send('register-hotkey', hotkey)
   },

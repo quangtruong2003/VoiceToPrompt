@@ -53,6 +53,7 @@ export function RecorderOverlay() {
     const [preservedBlob, setPreservedBlob] = useState<Blob | null>(null)
 
     const [isValidating, setIsValidating] = useState(false)
+    const [hotkey, setHotkey] = useState({ ctrl: true, win: false, alt: false, key: 'Space' })
 
     const showToast = useCallback((message: string, type: 'success' | 'error') => {
         setToast({ message, type })
@@ -149,6 +150,15 @@ export function RecorderOverlay() {
         window.electronAPI.getConfig().then((config) => {
             if (config.apiKey) setApiKey(config.apiKey)
             if (config.language) setLanguage(config.language)
+            if (config.hotkey) {
+                const parts = config.hotkey.split('+')
+                setHotkey({
+                    ctrl: parts.includes('Control'),
+                    win: parts.includes('Win'),
+                    alt: parts.includes('Alt'),
+                    key: parts.find(p => !['Win', 'Alt', 'Control', 'Ctrl', 'Shift'].includes(p)) || 'Space'
+                })
+            }
         })
 
         const cleanupToggle = window.electronAPI.onToggleRecording((shouldRecord: boolean) => {
@@ -346,6 +356,7 @@ export function RecorderOverlay() {
                                 <div className="wave-bar" style={{ animationDelay: '0.6s' }} />
                             </div>
                             <p className="placeholder-text">Hãy nói gì đó...</p>
+                            <p className="esc-hint">Nhấn <kbd>ESC</kbd> để dừng ghi âm</p>
                         </div>
                     )}
 
@@ -415,7 +426,12 @@ export function RecorderOverlay() {
                     )}
                 </div>
 
-                <div className="shortcut-hint">Win + Alt + H để toggle</div>
+                <div className="shortcut-hint">
+                    {hotkey.ctrl && <>Ctrl + </>}
+                    {hotkey.win && <>Win + </>}
+                    {hotkey.alt && <>Alt + </>}
+                    {hotkey.key} để toggle
+                </div>
             </div>
         </div>
     )

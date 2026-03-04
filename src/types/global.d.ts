@@ -9,6 +9,9 @@ interface AppConfig {
   startWithWindows: boolean
   hotkey: string
   hasEnvKey?: boolean
+  autoUpdate?: boolean
+  lastUpdateCheck?: string
+  appVersion?: string
   // Punctuation & Formatting Settings
   punctuationSettings?: {
     autoCapitalize: boolean
@@ -132,6 +135,7 @@ interface ElectronAPI {
   getConfig: () => Promise<AppConfig>
   saveConfig: (config: Partial<AppConfig>) => Promise<{ success: boolean }>
   setStartWithWindows: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  checkForUpdate: () => Promise<{ updateAvailable: boolean; latestVersion?: string; error?: string }>
   registerHotkey: (hotkey: string) => void
   validateApiKey: (apiKey: string) => Promise<{valid: boolean, error?: string}>
   closeSettings: () => void

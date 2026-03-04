@@ -44,6 +44,8 @@ interface AppConfig {
   customEndpoint: string
   startWithWindows: boolean
   hotkey: string
+  autoUpdate?: boolean
+  lastUpdateCheck?: string
   // Punctuation & Formatting Settings
   punctuationSettings: {
     autoCapitalize: boolean
@@ -60,6 +62,22 @@ const DEFAULT_PUNCTUATION_SETTINGS = {
   addPeriodAtEnd: true,
   removeFillerWords: false,
   numberFormatting: 'none' as const,
+}
+
+// Compare version strings (e.g., "1.2.0" vs "1.1.0")
+// Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+function compareVersions(v1: string, v2: string): number {
+  const parts1 = v1.split('.').map(Number)
+  const parts2 = v2.split('.').map(Number)
+  const maxLen = Math.max(parts1.length, parts2.length)
+
+  for (let i = 0; i < maxLen; i++) {
+    const p1 = parts1[i] || 0
+    const p2 = parts2[i] || 0
+    if (p1 > p2) return 1
+    if (p1 < p2) return -1
+  }
+  return 0
 }
 
 function loadEnvApiKey(): string {
@@ -85,7 +103,7 @@ function loadConfig(): AppConfig {
         apiType: 'google',
         customEndpoint: '',
         startWithWindows: false,
-        hotkey: 'Win+Alt+H',
+        hotkey: 'Control+Space',
         punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
 
         ...config
@@ -99,7 +117,7 @@ function loadConfig(): AppConfig {
     apiType: 'google',
     customEndpoint: '',
     startWithWindows: false,
-    hotkey: 'Win+Alt+H',
+    hotkey: 'Control+Space',
     punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
 
   }
@@ -776,7 +794,7 @@ function setupIPC() {
     const autoStartStatus = config.startWithWindows !== undefined
       ? config.startWithWindows
       : getAutoStartStatus()
-    return { ...config, apiKey: envKey || config.apiKey, hasEnvKey: !!envKey, startWithWindows: autoStartStatus }
+    return { ...config, apiKey: envKey || config.apiKey, hasEnvKey: !!envKey, startWithWindows: autoStartStatus, appVersion: app.getVersion() }
   })
 
   ipcMain.handle('set-start-with-windows', (_event, enabled: boolean) => {
@@ -786,6 +804,27 @@ function setupIPC() {
       return { success: true }
     } catch (err: any) {
       return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('check-for-update', async () => {
+    try {
+      const currentVersion = app.getVersion()
+      // Check GitHub releases for latest version
+      const response = await fetch('https://api.github.com/repos/quangtruong2003/voice-to-text/releases/latest')
+      if (!response.ok) {
+        return { updateAvailable: false, error: 'Không thể kiểm tra cập nhật' }
+      }
+      const data = await response.json()
+      const latestVersion = data.tag_name?.replace('v', '') || '0.0.0'
+
+      const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0
+      const now = new Date().toISOString()
+      saveConfig({ lastUpdateCheck: now, autoUpdate: true })
+
+      return { updateAvailable: isUpdateAvailable, latestVersion }
+    } catch (err: any) {
+      return { updateAvailable: false, error: err.message }
     }
   })
 
@@ -883,6 +922,27 @@ app.whenReady().then(() => {
   } else if (config.startWithWindows !== systemAutoStart) {
     // Config differs from system - update system to match config
     setAutoStart(config.startWithWindows)
+  }
+
+  // Auto check for updates on startup (if enabled)
+  if (config.autoUpdate !== false) {
+    setTimeout(async () => {
+      try {
+        const response = await fetch('https://api.github.com/repos/quangtruong2003/voice-to-text/releases/latest')
+        if (response.ok) {
+          const data = await response.json()
+          const latestVersion = data.tag_name?.replace('v', '') || '0.0.0'
+          const currentVersion = app.getVersion()
+          const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0
+          if (isUpdateAvailable) {
+            console.log(`[Auto-update] New version available: ${latestVersion} (current: ${currentVersion})`)
+          }
+          saveConfig({ lastUpdateCheck: new Date().toISOString() })
+        }
+      } catch (err) {
+        console.warn('[Auto-update] Failed to check for updates:', err)
+      }
+    }, 5000) // Wait 5 seconds after startup to check
   }
 
   setupPermissions()
