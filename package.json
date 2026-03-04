@@ -1,6 +1,6 @@
 {
   "name": "voice-to-text",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Voice-to-Text dictation app for Windows",
   "main": "dist-electron/main.js",
   "scripts": {
