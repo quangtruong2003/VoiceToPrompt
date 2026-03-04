@@ -279,10 +279,10 @@ function createSettingsWindow() {
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
 
   settingsWindow = new BrowserWindow({
-    width: 480,
-    height: 600,
-    x: Math.round((screenWidth - 480) / 2),
-    y: Math.round((screenHeight - 600) / 2),
+    width: 620,
+    height: 580,
+    x: Math.round((screenWidth - 620) / 2),
+    y: Math.round((screenHeight - 580) / 2),
     frame: false,
     transparent: true,
     resizable: false,

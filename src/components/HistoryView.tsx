@@ -16,8 +16,9 @@ const LANGUAGE_LABELS: Record<string, string> = {
 export function HistoryView({ onClose }: HistoryViewProps) {
   const [history, setHistory] = useState<TranscriptionRecord[]>([])
   const [stats, setStats] = useState(getHistoryStats())
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [isPinned, setIsPinned] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     setHistory(getHistory())
@@ -28,8 +29,8 @@ export function HistoryView({ onClose }: HistoryViewProps) {
     deleteFromHistory(id)
     setHistory(getHistory())
     setStats(getHistoryStats())
-    if (selectedId === id) {
-      setSelectedId(null)
+    if (expandedId === id) {
+      setExpandedId(null)
     }
   }
 
@@ -77,11 +78,18 @@ export function HistoryView({ onClose }: HistoryViewProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const filteredHistory = searchQuery.trim()
+    ? history.filter(record => {
+      const text = (record.finalText || record.originalText).toLowerCase()
+      return text.includes(searchQuery.toLowerCase())
+    })
+    : history
+
   return (
     <div className="history-container">
       <div className="history-header">
         <div className="history-header-left">
-          <h2>Lịch sử Transcription</h2>
+          <h2>Lịch sử</h2>
           <span className="history-count">{history.length} bản ghi</span>
         </div>
         <div className="history-header-actions">
@@ -107,42 +115,65 @@ export function HistoryView({ onClose }: HistoryViewProps) {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="history-stats">
-        <div className="history-stat-item">
-          <span className="history-stat-value">{stats.totalTranscriptions}</span>
-          <span className="history-stat-label">Tổng bản ghi</span>
+      {/* Bento Stats 2x2 */}
+      <div className="history-stats-bento">
+        <div className="bento-stat-item">
+          <span className="bento-stat-value">{stats.totalTranscriptions}</span>
+          <span className="bento-stat-label">Tổng bản ghi</span>
         </div>
-        <div className="history-stat-item">
-          <span className="history-stat-value">{stats.totalWords}</span>
-          <span className="history-stat-label">Tổng từ</span>
+        <div className="bento-stat-item">
+          <span className="bento-stat-value">{stats.totalWords}</span>
+          <span className="bento-stat-label">Tổng từ</span>
         </div>
-        <div className="history-stat-item">
-          <span className="history-stat-value">{stats.avgWordsPerTranscription}</span>
-          <span className="history-stat-label">TB từ/bản</span>
+        <div className="bento-stat-item">
+          <span className="bento-stat-value">{stats.avgWordsPerTranscription}</span>
+          <span className="bento-stat-label">TB từ/bản</span>
         </div>
-        <div className="history-stat-item">
-          <span className="history-stat-value">{stats.todayCount}</span>
-          <span className="history-stat-label">Hôm nay</span>
+        <div className="bento-stat-item accent">
+          <span className="bento-stat-value">{stats.todayCount}</span>
+          <span className="bento-stat-label">Hôm nay</span>
         </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="history-search-wrap">
+        <svg className="history-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input
+          type="text"
+          className="history-search-input"
+          placeholder="Tìm kiếm nội dung..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button className="history-search-clear" onClick={() => setSearchQuery('')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* History List */}
       <div className="history-list">
-        {history.length === 0 ? (
+        {filteredHistory.length === 0 ? (
           <div className="history-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p>Chưa có bản ghi nào</p>
-            <span>Bắt đầu sử dụng để ghi lại lịch sử</span>
+            <p>{searchQuery ? 'Không tìm thấy kết quả' : 'Chưa có bản ghi nào'}</p>
+            <span>{searchQuery ? 'Thử từ khóa khác' : 'Bắt đầu sử dụng để ghi lại lịch sử'}</span>
           </div>
         ) : (
-          history.map((record) => (
+          filteredHistory.map((record) => (
             <div
               key={record.id}
-              className={`history-item ${selectedId === record.id ? 'selected' : ''}`}
-              onClick={() => setSelectedId(record.id)}
+              className={`history-item ${expandedId === record.id ? 'expanded' : ''}`}
+              onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}
             >
               <div className="history-item-header">
                 <div className="history-item-meta">
@@ -179,13 +210,16 @@ export function HistoryView({ onClose }: HistoryViewProps) {
                   </button>
                 </div>
               </div>
-              <div className="history-item-text">
+              <div className={`history-item-text ${expandedId === record.id ? 'expanded' : ''}`}>
                 {record.finalText || record.originalText}
               </div>
               <div className="history-item-footer">
                 <span className="history-word-count">{record.wordCount} từ</span>
                 {record.finalText && record.finalText !== record.originalText && (
                   <span className="history-edited">Đã chỉnh sửa</span>
+                )}
+                {expandedId !== record.id && (record.finalText || record.originalText).length > 120 && (
+                  <span className="history-expand-hint">Nhấn để xem thêm</span>
                 )}
               </div>
             </div>
