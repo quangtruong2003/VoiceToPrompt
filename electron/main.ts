@@ -53,6 +53,9 @@ interface AppConfig {
   geminiModel: string
   autoUpdate?: boolean
   lastUpdateCheck?: string
+  transcriptionEngine: 'gemini' | 'whisper'
+  whisperModel: string
+  whisperModelPath: string
   // Punctuation & Formatting Settings
   punctuationSettings: {
     autoCapitalize: boolean
@@ -155,6 +158,9 @@ function loadConfig(forceReload = false): AppConfig {
         hotkey: 'Control+Space',
         historyHotkey: 'Alt+V',
         geminiModel: 'gemini-2.0-flash',
+        transcriptionEngine: 'gemini',
+        whisperModel: 'onnx-community/whisper-small',
+        whisperModelPath: '',
         punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
 
         ...config
@@ -181,6 +187,9 @@ function loadConfig(forceReload = false): AppConfig {
     hotkey: 'Control+Space',
     historyHotkey: 'Alt+V',
     geminiModel: 'gemini-2.0-flash',
+    transcriptionEngine: 'gemini',
+    whisperModel: 'onnx-community/whisper-small',
+    whisperModelPath: '',
     punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
   }
   
@@ -838,9 +847,174 @@ async function transcribeAudio(audioBuffer: ArrayBuffer, language: string): Prom
   const data = await response.json()
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
 
-  // Apply punctuation/formatting settings
   const punctuationSettings = config.punctuationSettings || DEFAULT_PUNCTUATION_SETTINGS
   return formatText(rawText, punctuationSettings)
+}
+
+// ============================================================
+// WHISPER LOCAL TRANSCRIPTION (Transformers.js + ONNX)
+// ============================================================
+
+const WHISPER_MODELS = [
+  { id: 'onnx-community/whisper-tiny', name: 'Whisper Tiny', size: '~75MB' },
+  { id: 'onnx-community/whisper-base', name: 'Whisper Base', size: '~142MB' },
+  { id: 'onnx-community/whisper-small', name: 'Whisper Small', size: '~461MB' },
+  { id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large V3 Turbo', size: '~1.5GB' },
+]
+
+let whisperPipeline: any = null
+let currentWhisperModelId: string | null = null
+let currentWhisperCacheDir: string | null = null
+
+function getWhisperCacheDir(): string {
+  const config = loadConfig()
+  if (config.whisperModelPath && config.whisperModelPath.trim()) {
+    return config.whisperModelPath.trim()
+  }
+  return path.join(app.getPath('userData'), 'whisper-models')
+}
+
+async function getWhisperPipeline(modelId: string) {
+  const cacheDir = getWhisperCacheDir()
+
+  if (whisperPipeline && currentWhisperModelId === modelId && currentWhisperCacheDir === cacheDir) {
+    return whisperPipeline
+  }
+
+  const { pipeline, env } = await import('@huggingface/transformers')
+
+  // Set custom cache directory globally for transformers
+  env.cacheDir = cacheDir
+  env.localModelPath = cacheDir
+  env.allowLocalModels = true
+  env.allowRemoteModels = true
+
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true })
+  }
+
+  console.log(`Loading Whisper model: ${modelId} (cache: ${cacheDir})...`)
+
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send('whisper-download-progress', {
+      modelId,
+      status: 'loading',
+      progress: 0,
+    })
+  }
+
+  // Also pass to pipeline options as fallback
+  whisperPipeline = await pipeline('automatic-speech-recognition', modelId, {
+    dtype: 'q8',
+    cache_dir: cacheDir,
+  })
+  currentWhisperModelId = modelId
+  currentWhisperCacheDir = cacheDir
+
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send('whisper-download-progress', {
+      modelId,
+      status: 'ready',
+      progress: 100,
+    })
+  }
+
+  console.log(`Whisper model ${modelId} loaded successfully`)
+  return whisperPipeline
+}
+
+async function transcribeWithWhisper(audioBuffer: ArrayBuffer, language: string): Promise<string> {
+  const config = loadConfig()
+  const modelId = config.whisperModel || 'onnx-community/whisper-small'
+
+  const pipe = await getWhisperPipeline(modelId)
+
+  // Convert WebM ArrayBuffer to Float32Array at 16kHz mono
+  // Whisper expects 16kHz mono Float32Array
+  const WaveFile = require('wavefile').WaveFile
+  const audioData = await convertAudioToFloat32(Buffer.from(audioBuffer), WaveFile)
+
+  const langMap: Record<string, string> = {
+    'vi': 'vietnamese',
+    'en': 'english',
+    'ja': 'japanese',
+    'ko': 'korean',
+    'zh': 'chinese',
+  }
+
+  const result = await pipe(audioData, {
+    language: langMap[language] || 'vietnamese',
+    task: 'transcribe',
+  })
+
+  const rawText = (result?.text || '').trim()
+
+  const punctuationSettings = config.punctuationSettings || DEFAULT_PUNCTUATION_SETTINGS
+  return formatText(rawText, punctuationSettings)
+}
+
+async function convertAudioToFloat32(audioBuffer: Buffer, WaveFile: any): Promise<Float32Array> {
+  // Try to decode as WAV first
+  try {
+    const wav = new WaveFile(audioBuffer)
+    wav.toBitDepth('32f')
+    wav.toSampleRate(16000)
+    let samples = wav.getSamples()
+    if (Array.isArray(samples)) {
+      if (samples.length > 1) {
+        const SCALING_FACTOR = Math.sqrt(2)
+        for (let i = 0; i < samples[0].length; ++i) {
+          samples[0][i] = (SCALING_FACTOR * (samples[0][i] + samples[1][i])) / 2
+        }
+      }
+      samples = samples[0]
+    }
+    return samples
+  } catch {
+    // If not WAV (e.g. WebM from browser recording), use ffmpeg or raw conversion
+    // For WebM: use the raw audio data approach
+    // The browser's MediaRecorder outputs WebM/Opus, we need to convert to PCM
+    // Use a simple approach: write to temp file, use ffmpeg if available, otherwise try raw decode
+    const tempDir = path.join(app.getPath('temp'), 'whisper-audio')
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
+
+    const inputPath = path.join(tempDir, `input-${Date.now()}.webm`)
+    const outputPath = path.join(tempDir, `output-${Date.now()}.wav`)
+    fs.writeFileSync(inputPath, audioBuffer)
+
+    try {
+      // Try ffmpeg conversion
+      const { execSync } = require('child_process')
+      execSync(`ffmpeg -y -i "${inputPath}" -ar 16000 -ac 1 -f wav "${outputPath}"`, {
+        stdio: 'pipe',
+        timeout: 30000,
+      })
+      const wavBuffer = fs.readFileSync(outputPath)
+      const wav = new WaveFile(wavBuffer)
+      wav.toBitDepth('32f')
+      let samples = wav.getSamples()
+      if (Array.isArray(samples)) samples = samples[0]
+
+      // Cleanup
+      try { fs.unlinkSync(inputPath) } catch {}
+      try { fs.unlinkSync(outputPath) } catch {}
+
+      return samples
+    } catch {
+      // Cleanup on failure
+      try { fs.unlinkSync(inputPath) } catch {}
+      try { fs.unlinkSync(outputPath) } catch {}
+
+      // Fallback: create a simple Float32Array from audio bytes
+      // This is a rough conversion and may not work perfectly
+      const float32 = new Float32Array(audioBuffer.length / 2)
+      const view = new DataView(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength)
+      for (let i = 0; i < float32.length; i++) {
+        float32[i] = view.getInt16(i * 2, true) / 32768.0
+      }
+      return float32
+    }
+  }
 }
 
 /**
@@ -1099,7 +1273,15 @@ function setupIPC() {
     isRecording = false
     unregisterRecordingShortcuts()
     try {
-      const text = await transcribeAudio(audioBuffer, language)
+      const config = loadConfig()
+      let text: string
+
+      if (config.transcriptionEngine === 'whisper') {
+        text = await transcribeWithWhisper(audioBuffer, language)
+      } else {
+        text = await transcribeAudio(audioBuffer, language)
+      }
+
       return { success: true, text }
     } catch (error: any) {
       const msg = error.message || 'Unknown error'
@@ -1204,6 +1386,54 @@ function setupIPC() {
   ipcMain.handle('get-gemini-models', async () => {
     const models = await fetchGeminiModels()
     return { models }
+  })
+
+  ipcMain.handle('get-whisper-models', async () => {
+    return { models: WHISPER_MODELS }
+  })
+
+  ipcMain.handle('download-whisper-model', async (_event, modelId: string) => {
+    try {
+      await getWhisperPipeline(modelId)
+      return { success: true }
+    } catch (error: any) {
+      console.error('Failed to download whisper model:', error)
+      return { success: false, error: error.message || 'Download failed' }
+    }
+  })
+
+  ipcMain.handle('check-whisper-model-downloaded', async (_event, modelId: string) => {
+    try {
+      const cacheDir = getWhisperCacheDir()
+      const modelPath = path.join(cacheDir, modelId)
+      const exists = fs.existsSync(modelPath) && fs.existsSync(path.join(modelPath, 'config.json'))
+      return { downloaded: exists }
+    } catch {
+      return { downloaded: false }
+    }
+  })
+
+  ipcMain.handle('select-whisper-model-folder', async () => {
+    const result = await dialog.showOpenDialog(settingsWindow!, {
+      title: 'Chọn thư mục lưu model Whisper',
+      defaultPath: getWhisperCacheDir(),
+      properties: ['openDirectory', 'createDirectory'],
+    })
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      const selectedPath = result.filePaths[0]
+      const config = loadConfig(true)
+      config.whisperModelPath = selectedPath
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+      configCache = null
+
+      if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.webContents.send('config-updated', { whisperModelPath: selectedPath })
+      }
+
+      return { success: true, path: selectedPath }
+    }
+    return { success: false }
   })
 
   ipcMain.on('close-settings', () => {

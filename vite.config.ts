@@ -14,7 +14,13 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['@nut-tree-fork/nut-js'],
+              external: [
+                '@nut-tree-fork/nut-js',
+                '@huggingface/transformers',
+                'onnxruntime-node',
+                'wavefile',
+                'sharp',
+              ],
             },
           },
         },

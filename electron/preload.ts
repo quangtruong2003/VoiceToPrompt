@@ -75,6 +75,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('get-gemini-models')
   },
 
+  getWhisperModels: () => {
+    return ipcRenderer.invoke('get-whisper-models')
+  },
+
+  downloadWhisperModel: (modelId: string) => {
+    return ipcRenderer.invoke('download-whisper-model', modelId)
+  },
+
+  selectWhisperModelFolder: () => {
+    return ipcRenderer.invoke('select-whisper-model-folder')
+  },
+
+  checkWhisperModelDownloaded: (modelId: string) => {
+    return ipcRenderer.invoke('check-whisper-model-downloaded', modelId)
+  },
+
+  onWhisperDownloadProgress: (callback: (progress: any) => void) => {
+    const listener = (_event: any, progress: any) => callback(progress)
+    ipcRenderer.on('whisper-download-progress', listener)
+    return () => ipcRenderer.removeListener('whisper-download-progress', listener)
+  },
+
   closeSettings: () => {
     ipcRenderer.send('close-settings')
   },

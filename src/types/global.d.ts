@@ -14,6 +14,9 @@ interface AppConfig {
   autoUpdate?: boolean
   lastUpdateCheck?: string
   appVersion?: string
+  transcriptionEngine: 'gemini' | 'whisper'
+  whisperModel: string
+  whisperModelPath: string
   // Punctuation & Formatting Settings
   punctuationSettings?: {
     autoCapitalize: boolean
@@ -144,6 +147,11 @@ interface ElectronAPI {
   registerHistoryHotkey: (hotkey: string) => void
   validateApiKey: (apiKey: string) => Promise<{valid: boolean, error?: string}>
   getGeminiModels: () => Promise<{ models: { name: string; displayName: string; description: string; version: string; supportsAudio?: boolean }[] }>
+  getWhisperModels: () => Promise<{ models: { id: string; name: string; size: string }[] }>
+  downloadWhisperModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  selectWhisperModelFolder: () => Promise<{ success: boolean; path?: string }>
+  checkWhisperModelDownloaded: (modelId: string) => Promise<{ downloaded: boolean }>
+  onWhisperDownloadProgress: (callback: (progress: { modelId: string; status: string; progress?: number }) => void) => () => void
   closeSettings: () => void
   openExternal: (url: string) => void
   // Performance monitoring APIs

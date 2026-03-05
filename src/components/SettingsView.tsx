@@ -14,7 +14,7 @@ const LANGUAGES = [
 
 const GITHUB_REPO = 'quangtruong2003/VoiceToPrompt'
 
-type SidebarSection = 'general' | 'microphone' | 'api' | 'formatting' | 'performance' | 'about'
+type SidebarSection = 'general' | 'microphone' | 'engine' | 'api' | 'formatting' | 'performance' | 'about'
 
 function getSidebarItems(t: (key: string) => string): { id: SidebarSection; label: string; icon: JSX.Element }[] {
     return [
@@ -37,6 +37,17 @@ function getSidebarItems(t: (key: string) => string): { id: SidebarSection; labe
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                     <line x1="12" y1="19" x2="12" y2="23" />
                     <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+            ),
+        },
+        {
+            id: 'engine',
+            label: t('settings.sections.engine'),
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2a4 4 0 0 0-4 4v1H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z" />
+                    <circle cx="9" cy="14" r="1" />
+                    <circle cx="15" cy="14" r="1" />
                 </svg>
             ),
         },
@@ -239,6 +250,15 @@ export function SettingsView() {
     const [availableModels, setAvailableModels] = useState<{ name: string; displayName: string }[]>([])
     const [isLoadingModels, setIsLoadingModels] = useState(false)
 
+    // Whisper engine state
+    const [transcriptionEngine, setTranscriptionEngine] = useState<'gemini' | 'whisper'>('gemini')
+    const [whisperModel, setWhisperModel] = useState('onnx-community/whisper-small')
+    const [whisperModels, setWhisperModels] = useState<{ id: string; name: string; size: string }[]>([])
+    const [isDownloadingWhisper, setIsDownloadingWhisper] = useState(false)
+    const [whisperDownloadStatus, setWhisperDownloadStatus] = useState<string>('')
+    const [whisperModelPath, setWhisperModelPath] = useState<string>('')
+    const [downloadedModels, setDownloadedModels] = useState<Set<string>>(new Set())
+
     const { devices: audioDevices, selectedDeviceId: selectedAudioDevice, isLoading: audioDevicesLoading, selectDevice: setAudioDevice, reloadDevices: reloadAudioDevices } = useAudioDevices()
 
     const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -299,6 +319,17 @@ export function SettingsView() {
 
             // Load available Gemini models
             loadGeminiModels()
+            loadWhisperModels()
+
+            if (config.transcriptionEngine) {
+                setTranscriptionEngine(config.transcriptionEngine)
+            }
+            if (config.whisperModel) {
+                setWhisperModel(config.whisperModel)
+            }
+            if (config.whisperModelPath) {
+                setWhisperModelPath(config.whisperModelPath)
+            }
 
             if (config.hotkey) {
                 const parts = config.hotkey.split('+')
@@ -331,6 +362,78 @@ export function SettingsView() {
         })
         return cleanupConfigUpdate
     }, [setI18nLanguage, validateApiKey])
+
+    const loadWhisperModels = async () => {
+        if (!window.electronAPI) return
+        try {
+            const result = await window.electronAPI.getWhisperModels()
+            if (result.models && result.models.length > 0) {
+                setWhisperModels(result.models)
+                checkDownloadedModels(result.models.map((m: any) => m.id))
+            }
+        } catch (err) {
+            console.error('Failed to load Whisper models:', err)
+        }
+    }
+
+    const handleEngineChange = async (engine: 'gemini' | 'whisper') => {
+        setTranscriptionEngine(engine)
+        await window.electronAPI.saveConfig({ transcriptionEngine: engine })
+        showToast(t('settings.engine.engineSaved'), 'success')
+    }
+
+    const handleWhisperModelChange = async (modelId: string) => {
+        setWhisperModel(modelId)
+        await window.electronAPI.saveConfig({ whisperModel: modelId })
+        showToast(t('settings.engine.modelSaved'), 'success')
+    }
+
+    const handleDownloadWhisperModel = async () => {
+        setIsDownloadingWhisper(true)
+        setWhisperDownloadStatus(t('settings.engine.downloading'))
+        try {
+            const result = await window.electronAPI.downloadWhisperModel(whisperModel)
+            if (result.success) {
+                setWhisperDownloadStatus(t('settings.engine.modelReady'))
+                setDownloadedModels(prev => new Set(prev).add(whisperModel))
+                showToast(t('settings.engine.downloadSuccess'), 'success')
+            } else {
+                setWhisperDownloadStatus('')
+                showToast(t('settings.engine.downloadError') + ': ' + (result.error || ''), 'error')
+            }
+        } catch (err: any) {
+            setWhisperDownloadStatus('')
+            showToast(t('settings.engine.downloadError'), 'error')
+        } finally {
+            setIsDownloadingWhisper(false)
+        }
+    }
+
+    const checkDownloadedModels = async (modelIds: string[]) => {
+        const downloaded = new Set<string>()
+        for (const modelId of modelIds) {
+            try {
+                const result = await window.electronAPI.checkWhisperModelDownloaded(modelId)
+                if (result?.downloaded) {
+                    downloaded.add(modelId)
+                }
+            } catch { }
+        }
+        setDownloadedModels(downloaded)
+    }
+
+    const handleSelectModelFolder = async () => {
+        try {
+            const result = await window.electronAPI.selectWhisperModelFolder()
+            if (result.success && result.path) {
+                setWhisperModelPath(result.path)
+                checkDownloadedModels(whisperModels.map(m => m.id))
+                showToast(t('settings.engine.folderSaved'), 'success')
+            }
+        } catch (err) {
+            console.error('Failed to select model folder:', err)
+        }
+    }
 
     const handleSaveApiKey = async () => {
         if (!apiKeyInput.trim()) return
@@ -688,6 +791,161 @@ export function SettingsView() {
                                 )}
                             </div>
                         </div>
+                    </div>
+                )
+
+            case 'engine':
+                return (
+                    <div className="settings-content-panel">
+                        <h2 className="content-panel-title">{t('settings.engine.title')}</h2>
+
+                        <div className="list-grouped-card">
+                            <div className="list-grouped-item">
+                                <div className="list-item-left">
+                                    <span className="list-item-label">{t('settings.engine.selectEngine')}</span>
+                                    <span className="list-item-hint">{t('settings.engine.selectEngineHint')}</span>
+                                </div>
+                            </div>
+                            <div className="list-grouped-item no-border">
+                                <div className="provider-selector" style={{ width: '100%' }}>
+                                    <div
+                                        className="provider-indicator"
+                                        style={{
+                                            width: '50%',
+                                            transform: transcriptionEngine === 'gemini' ? 'translateX(0)' : 'translateX(100%)',
+                                        }}
+                                    />
+                                    <button
+                                        className={`provider-option ${transcriptionEngine === 'gemini' ? 'active' : ''}`}
+                                        onClick={() => handleEngineChange('gemini')}
+                                        type="button"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                                            <path d="M2 17l10 5 10-5" />
+                                            <path d="M2 12l10 5 10-5" />
+                                        </svg>
+                                        <span className="provider-label">{t('settings.engine.gemini')}</span>
+                                    </button>
+                                    <button
+                                        className={`provider-option ${transcriptionEngine === 'whisper' ? 'active' : ''}`}
+                                        onClick={() => handleEngineChange('whisper')}
+                                        type="button"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 2a4 4 0 0 0-4 4v1H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z" />
+                                            <circle cx="9" cy="14" r="1" />
+                                            <circle cx="15" cy="14" r="1" />
+                                        </svg>
+                                        <span className="provider-label">{t('settings.engine.whisper')}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {transcriptionEngine === 'gemini' ? (
+                            <div className="list-grouped-card">
+                                <div className="list-grouped-item no-border">
+                                    <div className="list-item-left">
+                                        <span className="list-item-label">{t('settings.engine.gemini')}</span>
+                                        <span className="list-item-hint">{t('settings.engine.geminiDesc')}</span>
+                                        <span className="list-item-hint" style={{ marginTop: 4, opacity: 0.7 }}>
+                                            {t('settings.engine.geminiHint')}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="list-grouped-card">
+                                    <div className="list-grouped-item">
+                                        <div className="list-item-left">
+                                            <span className="list-item-label">{t('settings.engine.whisperModel')}</span>
+                                            <span className="list-item-hint">{t('settings.engine.modelHint')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="list-grouped-item no-border">
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                                            <select
+                                                className="settings-select"
+                                                value={whisperModel}
+                                                onChange={(e) => handleWhisperModelChange(e.target.value)}
+                                            >
+                                                {whisperModels.map((model) => (
+                                                    <option key={model.id} value={model.id}>
+                                                        {model.name} ({model.size})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                {downloadedModels.has(whisperModel) ? (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)', padding: '4px 10px', borderRadius: 6, fontWeight: 500 }}>
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                            <polyline points="20 6 9 17 4 12" />
+                                                        </svg>
+                                                        {t('settings.engine.downloaded')}
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            className="btn btn-primary btn-small"
+                                                            onClick={handleDownloadWhisperModel}
+                                                            disabled={isDownloadingWhisper}
+                                                            style={{ flex: '0 0 auto' }}
+                                                        >
+                                                            {isDownloadingWhisper ? (
+                                                                <span className="btn-spinner"></span>
+                                                            ) : (
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                                    <polyline points="7 10 12 15 17 10" />
+                                                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                                                </svg>
+                                                            )}
+                                                            {isDownloadingWhisper ? t('settings.engine.downloading') : t('settings.engine.downloadModel')}
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="list-grouped-card">
+                                    <div className="list-grouped-item">
+                                        <div className="list-item-left">
+                                            <span className="list-item-label">{t('settings.engine.modelFolder')}</span>
+                                            <span className="list-item-hint">{t('settings.engine.modelFolderHint')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="list-grouped-item no-border">
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+                                            <span style={{ fontSize: 12, opacity: 0.7, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {whisperModelPath || t('settings.engine.defaultFolder')}
+                                            </span>
+                                            <button
+                                                className="btn btn-secondary btn-small"
+                                                onClick={handleSelectModelFolder}
+                                                style={{ flex: '0 0 auto' }}
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                                </svg>
+                                                {t('settings.engine.changeFolder')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="list-grouped-card">
+                                    <div className="list-grouped-item no-border">
+                                        <div className="list-item-left">
+                                            <span className="list-item-hint">{t('settings.engine.whisperDesc')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )
 
