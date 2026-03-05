@@ -1028,7 +1028,10 @@ export function SettingsView() {
                             <div className="list-grouped-item">
                                 <div className="list-item-left">
                                     <span className="list-item-label">{t('settings.about.autoUpdate')}</span>
-                                    <span className="list-item-hint">{t('settings.about.autoUpdateHint')}</span>
+                                    <span className="list-item-hint">
+                                        {t('settings.about.autoUpdateHint')}
+                                        {appVersion && ` (Phiên bản hiện tại: v${appVersion})`}
+                                    </span>
                                 </div>
                                 <button
                                     className={`toggle-switch ${autoUpdate ? 'active' : ''}`}

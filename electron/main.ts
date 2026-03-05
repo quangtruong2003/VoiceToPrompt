@@ -1007,6 +1007,93 @@ function registerNewHistoryHotkey(hotkey: string) {
   }
 }
 
+async function downloadAndInstallUpdate(downloadUrl: string, fileName: string): Promise<void> {
+  const tempDir = path.join(app.getPath('temp'), 'voice-to-prompt-update')
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true })
+  }
+  const filePath = path.join(tempDir, fileName)
+
+  const response = await fetch(downloadUrl)
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.status} ${response.statusText}`)
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer())
+  fs.writeFileSync(filePath, buffer)
+
+  // Launch installer and quit app
+  const { exec } = require('child_process')
+  exec(`"${filePath}"`, { detached: true, stdio: 'ignore' })
+
+  setTimeout(() => {
+    app.isQuitting = true
+    app.quit()
+  }, 1000)
+}
+
+async function showUpdateDialog(currentVersion: string, latestVersion: string, assets: any[]): Promise<void> {
+  const setupAsset = assets.find((a: any) => a.name.endsWith('.exe'))
+  if (!setupAsset) {
+    dialog.showErrorBox('Cập nhật', 'Không tìm thấy file cài đặt cho bản cập nhật này.')
+    return
+  }
+
+  const result = await dialog.showMessageBox({
+    type: 'info',
+    title: 'Có bản cập nhật mới!',
+    message: `Phiên bản mới đã sẵn sàng!`,
+    detail: `Phiên bản hiện tại: v${currentVersion}\nPhiên bản mới: v${latestVersion}\n\nBạn có muốn tải và cài đặt bản cập nhật ngay?`,
+    buttons: ['Update', 'Skip'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+
+  if (result.response === 0) {
+    // User chose "Update"
+    const progressDialog = new BrowserWindow({
+      width: 360,
+      height: 140,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      closable: false,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+    })
+    progressDialog.loadURL(`data:text/html;charset=utf-8,
+      <html><body style="
+        font-family: 'Segoe UI', sans-serif;
+        background: rgba(20,20,30,0.95);
+        color: #e0e0e0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.1);
+      ">
+        <p style="font-size:14px;margin:0 0 12px;">Đang tải bản cập nhật v${latestVersion}...</p>
+        <div style="width:80%;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
+          <div style="width:100%;height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);animation:loading 1.5s ease-in-out infinite;"></div>
+        </div>
+        <style>@keyframes loading{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}</style>
+      </body></html>`)
+
+    try {
+      await downloadAndInstallUpdate(setupAsset.browser_download_url, setupAsset.name)
+    } catch (err: any) {
+      progressDialog.destroy()
+      dialog.showErrorBox('Lỗi cập nhật', `Không thể tải bản cập nhật.\n\n${err.message}`)
+    }
+  }
+}
+
 function setupIPC() {
   ipcMain.handle('transcribe-audio', async (_event, audioBuffer: ArrayBuffer, language: string) => {
     isRecording = false
@@ -1061,7 +1148,6 @@ function setupIPC() {
   ipcMain.handle('check-for-update', async () => {
     try {
       const currentVersion = app.getVersion()
-      // Check GitHub releases for latest version
       const response = await fetch('https://api.github.com/repos/quangtruong2003/VoiceToPrompt/releases/latest')
       if (!response.ok) {
         return { updateAvailable: false, error: 'Không thể kiểm tra cập nhật' }
@@ -1072,6 +1158,10 @@ function setupIPC() {
       const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0
       const now = new Date().toISOString()
       saveConfig({ lastUpdateCheck: now, autoUpdate: true })
+
+      if (isUpdateAvailable) {
+        showUpdateDialog(currentVersion, latestVersion, data.assets || [])
+      }
 
       return { updateAvailable: isUpdateAvailable, latestVersion }
     } catch (err: any) {
@@ -1218,13 +1308,14 @@ app.whenReady().then(() => {
           const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0
           if (isUpdateAvailable) {
             console.log(`[Auto-update] New version available: ${latestVersion} (current: ${currentVersion})`)
+            showUpdateDialog(currentVersion, latestVersion, data.assets || [])
           }
           saveConfig({ lastUpdateCheck: new Date().toISOString() })
         }
       } catch (err) {
         console.warn('[Auto-update] Failed to check for updates:', err)
       }
-    }, 5000) // Wait 5 seconds after startup to check
+    }, 5000)
   }
 
   setupPermissions()
