@@ -12,7 +12,7 @@ const LANGUAGES = [
     { code: 'zh', name: '中文', flag: '🇨🇳' },
 ]
 
-const GITHUB_REPO = 'quangtruong2003/voice-to-text'
+const GITHUB_REPO = 'quangtruong2003/VoiceToPrompt'
 
 type SidebarSection = 'general' | 'microphone' | 'api' | 'formatting' | 'performance' | 'about'
 

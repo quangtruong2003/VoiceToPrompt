@@ -1062,7 +1062,7 @@ function setupIPC() {
     try {
       const currentVersion = app.getVersion()
       // Check GitHub releases for latest version
-      const response = await fetch('https://api.github.com/repos/quangtruong2003/voice-to-text/releases/latest')
+      const response = await fetch('https://api.github.com/repos/quangtruong2003/VoiceToPrompt/releases/latest')
       if (!response.ok) {
         return { updateAvailable: false, error: 'Không thể kiểm tra cập nhật' }
       }
@@ -1210,7 +1210,7 @@ app.whenReady().then(() => {
   if (config.autoUpdate !== false) {
     setTimeout(async () => {
       try {
-        const response = await fetch('https://api.github.com/repos/quangtruong2003/voice-to-text/releases/latest')
+        const response = await fetch('https://api.github.com/repos/quangtruong2003/VoiceToPrompt/releases/latest')
         if (response.ok) {
           const data = await response.json()
           const latestVersion = data.tag_name?.replace('v', '') || '0.0.0'
