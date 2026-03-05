@@ -49,6 +49,7 @@ interface AppConfig {
   customEndpoint: string
   startWithWindows: boolean
   hotkey: string
+  historyHotkey: string
   geminiModel: string
   autoUpdate?: boolean
   lastUpdateCheck?: string
@@ -139,6 +140,11 @@ function loadConfig(forceReload = false): AppConfig {
         }
       }
 
+      if (!config.historyHotkey) {
+        config.historyHotkey = 'Alt+V'
+        needsMigration = true
+      }
+
       const merged: AppConfig = {
         apiKey: '',
         language: 'vi',
@@ -147,6 +153,7 @@ function loadConfig(forceReload = false): AppConfig {
         customEndpoint: '',
         startWithWindows: false,
         hotkey: 'Control+Space',
+        historyHotkey: 'Alt+V',
         geminiModel: 'gemini-2.0-flash',
         punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
 
@@ -172,6 +179,7 @@ function loadConfig(forceReload = false): AppConfig {
     customEndpoint: '',
     startWithWindows: false,
     hotkey: 'Control+Space',
+    historyHotkey: 'Alt+V',
     geminiModel: 'gemini-2.0-flash',
     punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
   }
@@ -359,7 +367,7 @@ function createOverlayWindow() {
 
   // Set overlay icon for Windows taskbar (shown when window is minimized)
   if (process.platform === 'win32') {
-    overlayWindow.setOverlayIcon(createTrayIcon(), 'Voice to Text')
+    overlayWindow.setOverlayIcon(createTrayIcon(), 'Voice to Prompt')
   }
 
   // Handle close event - minimize to tray instead of closing
@@ -624,7 +632,7 @@ function createTray() {
   tray = new Tray(trayIcon)
   
   // Set tooltip - shown when hovering over tray icon
-  tray.setToolTip('Voice to Text - Click to open')
+  tray.setToolTip('Voice to Prompt - Click to open')
 
   // Build context menu with standard options
   const contextMenu = Menu.buildFromTemplate([
@@ -685,7 +693,7 @@ function handleWindowClose(window: BrowserWindow) {
   // Show balloon notification (Windows only)
   if (process.platform === 'win32' && tray) {
     tray.displayBalloon({
-      title: 'Voice to Text',
+      title: 'Voice to Prompt',
       content: 'Ứng dụng đã được thu nhỏ vào system tray. Nhấp vào icon để hiện lại.',
       iconType: 'info',
     })
@@ -946,11 +954,13 @@ async function injectText(text: string) {
   }
 }
 
+let currentActionHotkey = 'Control+Space'
+let currentHistoryHotkey = 'Alt+V'
+
 function registerGlobalShortcut() {
   const config = loadConfig()
-  const hotkey = config.hotkey || 'Control+Space'
-  // Convert hotkey string to Electron format (e.g., "Control+Space" stays, "Win+H" -> "Super+H")
-  const electronHotkey = hotkey.replace('Win', 'Super')
+  currentActionHotkey = config.hotkey || 'Control+Space'
+  const electronHotkey = currentActionHotkey.replace('Win', 'Super')
   try {
     globalShortcut.register(electronHotkey, () => toggleRecording())
   } catch (e) {
@@ -958,17 +968,42 @@ function registerGlobalShortcut() {
   }
 }
 
+function registerHistoryShortcut() {
+  const config = loadConfig()
+  currentHistoryHotkey = config.historyHotkey || 'Alt+V'
+  const electronHotkey = currentHistoryHotkey.replace('Win', 'Super')
+  try {
+    globalShortcut.register(electronHotkey, () => createHistoryWindow())
+  } catch (e) {
+    console.warn('Failed to register history shortcut', e)
+  }
+}
+
 function registerNewHotkey(hotkey: string) {
-  // Unregister all shortcuts first
-  globalShortcut.unregisterAll()
-  // Register new hotkey
   const electronHotkey = hotkey.replace('Win', 'Super')
   try {
+    if (currentActionHotkey) {
+      globalShortcut.unregister(currentActionHotkey.replace('Win', 'Super'))
+    }
     globalShortcut.register(electronHotkey, () => toggleRecording())
+    currentActionHotkey = hotkey
   } catch (e) {
     console.warn('Failed to register new hotkey', e)
-    // Re-register default if failed
     registerGlobalShortcut()
+  }
+}
+
+function registerNewHistoryHotkey(hotkey: string) {
+  const electronHotkey = hotkey.replace('Win', 'Super')
+  try {
+    if (currentHistoryHotkey) {
+      globalShortcut.unregister(currentHistoryHotkey.replace('Win', 'Super'))
+    }
+    globalShortcut.register(electronHotkey, () => createHistoryWindow())
+    currentHistoryHotkey = hotkey
+  } catch (e) {
+    console.warn('Failed to register new history hotkey', e)
+    registerHistoryShortcut()
   }
 }
 
@@ -1049,6 +1084,14 @@ function setupIPC() {
       registerNewHotkey(hotkey)
     } catch (err: any) {
       console.error('Failed to register hotkey:', err)
+    }
+  })
+
+  ipcMain.on('register-history-hotkey', (_event, hotkey: string) => {
+    try {
+      registerNewHistoryHotkey(hotkey)
+    } catch (err: any) {
+      console.error('Failed to register history hotkey:', err)
     }
   })
 
@@ -1188,6 +1231,7 @@ app.whenReady().then(() => {
   createOverlayWindow()
   createTray()
   registerGlobalShortcut()
+  registerHistoryShortcut()
   setupIPC()
 })
 

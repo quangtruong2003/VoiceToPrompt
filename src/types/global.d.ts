@@ -8,6 +8,7 @@ interface AppConfig {
   customEndpoint: string
   startWithWindows: boolean
   hotkey: string
+  historyHotkey: string
   geminiModel: string
   hasEnvKey?: boolean
   autoUpdate?: boolean
@@ -140,6 +141,7 @@ interface ElectronAPI {
   setStartWithWindows: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   checkForUpdate: () => Promise<{ updateAvailable: boolean; latestVersion?: string; error?: string }>
   registerHotkey: (hotkey: string) => void
+  registerHistoryHotkey: (hotkey: string) => void
   validateApiKey: (apiKey: string) => Promise<{valid: boolean, error?: string}>
   getGeminiModels: () => Promise<{ models: { name: string; displayName: string; description: string; version: string; supportsAudio?: boolean }[] }>
   closeSettings: () => void

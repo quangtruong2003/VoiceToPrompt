@@ -1,5 +1,7 @@
 {
-  "app": { "name": "Voice to Text" },
+  "app": {
+    "name": "Voice to Prompt"
+  },
   "common": {
     "close": "닫기",
     "cancel": "취소",
@@ -29,6 +31,8 @@
       "defaultLanguage": "기본 언어",
       "hotkey": "녹음 단축키",
       "changeHotkey": "단축키 변경",
+      "historyHotkey": "기록 단축키",
+      "changeHistoryHotkey": "단축키 변경",
       "pressNewHotkey": "새 단축키를 누르세요...",
       "hotkeyHint": "새 키 조합(최소 2개 키)",
       "needAtLeast2Keys": "최소 2개 키가 필요합니다 (예: Ctrl+Space)",
@@ -78,6 +82,60 @@
       "keep": "그대로",
       "toDigits": "숫자로 변환 (1, 2, 3)",
       "saved": "설정을 저장했습니다!"
+    },
+    "performance": {
+      "overview": "개요",
+      "uptime": "가동 시간",
+      "totalRequests": "총 요청",
+      "successRate": "성공률",
+      "avgLatency": "평균 지연",
+      "timeSaved": "절약된 시간",
+      "latencyAnalysis": "지연 시간 분석",
+      "noLatencyData": "지연 데이터 없음",
+      "apiUsage": "API 사용량",
+      "requestsCount": "{{count}} 요청",
+      "lastNRequests": "최근 {{count}} 요청",
+      "latencyMs": "지연 (ms)",
+      "noApiData": "API 호출 기록 없음",
+      "optimizations": "최적화 기능",
+      "statistics": "통계",
+      "resetMetrics": "측정 항목 재설정",
+      "connection": "연결",
+      "tls": "TLS",
+      "request": "요청",
+      "response": "응답",
+      "processing": "처리",
+      "compression": "압축",
+      "total": "총",
+      "apiCallDetails": "API 호출 세부 정보",
+      "endpoint": "엔드포인트",
+      "method": "메서드",
+      "status": "상태",
+      "time": "시간",
+      "latencyBreakdown": "지연 시간 분석",
+      "connectionPool": "연결 풀",
+      "connectionPoolHint": "HTTP 연결을 재사용하여 지연 시간 감소",
+      "compressionFeature": "압축",
+      "compressionHint": "요청/응답 데이터 압축",
+      "caching": "캐싱",
+      "cachingHint": "반복되는 요청을 위해 API 응답 캐싱",
+      "asyncProcessing": "비동기 처리",
+      "asyncProcessingHint": "비동기적으로 요청 처리",
+      "connectionReuse": "연결 재사용",
+      "compressionRatio": "압축률",
+      "cacheHitRate": "캐시 적중률",
+      "totalProcessed": "총 처리된 항목",
+      "timeAgo": {
+        "seconds": "{{time}}초 전",
+        "minutes": "{{time}}분 전",
+        "hours": "{{time}}시간 전"
+      },
+      "uptimeFormat": {
+        "dh": "{{d}}일 {{h}}시간",
+        "hm": "{{h}}시간 {{m}}분",
+        "ms": "{{m}}분 {{s}}초",
+        "s": "{{s}}초"
+      }
     },
     "connectionStatus": {
       "unknown": "미확인",
@@ -148,4 +206,3 @@
     }
   }
 }
-

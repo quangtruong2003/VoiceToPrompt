@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Voice to Text"
+    "name": "Voice to Prompt"
   },
   "common": {
     "close": "Close",
@@ -31,6 +31,8 @@
       "defaultLanguage": "Default language",
       "hotkey": "Recording hotkey",
       "changeHotkey": "Change hotkey",
+      "historyHotkey": "History hotkey",
+      "changeHistoryHotkey": "Change hotkey",
       "pressNewHotkey": "Press a new hotkey...",
       "hotkeyHint": "Enter a new key combo (min 2 keys)",
       "needAtLeast2Keys": "Need at least 2 keys (e.g. Ctrl+Space)",
@@ -80,6 +82,60 @@
       "keep": "Keep as-is",
       "toDigits": "Convert to digits (1, 2, 3)",
       "saved": "Settings saved!"
+    },
+    "performance": {
+      "overview": "Overview",
+      "uptime": "Uptime",
+      "totalRequests": "Total Requests",
+      "successRate": "Success Rate",
+      "avgLatency": "Avg Latency",
+      "timeSaved": "Time Saved",
+      "latencyAnalysis": "Latency Analysis",
+      "noLatencyData": "No latency data yet",
+      "apiUsage": "API Usage",
+      "requestsCount": "{{count}} requests",
+      "lastNRequests": "Last {{count}} requests",
+      "latencyMs": "Latency (ms)",
+      "noApiData": "No API calls recorded",
+      "optimizations": "Optimization Features",
+      "statistics": "Statistics",
+      "resetMetrics": "Reset Metrics",
+      "connection": "Connection",
+      "tls": "TLS",
+      "request": "Request",
+      "response": "Response",
+      "processing": "Processing",
+      "compression": "Compression",
+      "total": "Total",
+      "apiCallDetails": "API Call Details",
+      "endpoint": "Endpoint",
+      "method": "Method",
+      "status": "Status",
+      "time": "Time",
+      "latencyBreakdown": "Latency Breakdown",
+      "connectionPool": "Connection Pool",
+      "connectionPoolHint": "Reuse HTTP connections to reduce latency",
+      "compressionFeature": "Compression",
+      "compressionHint": "Compress request/response data",
+      "caching": "Caching",
+      "cachingHint": "Cache API responses for repeated requests",
+      "asyncProcessing": "Async Processing",
+      "asyncProcessingHint": "Process requests asynchronously",
+      "connectionReuse": "Connection Reuse",
+      "compressionRatio": "Compression Ratio",
+      "cacheHitRate": "Cache Hit Rate",
+      "totalProcessed": "Total Processed",
+      "timeAgo": {
+        "seconds": "{{time}}s ago",
+        "minutes": "{{time}}m ago",
+        "hours": "{{time}}h ago"
+      },
+      "uptimeFormat": {
+        "dh": "{{d}}d {{h}}h",
+        "hm": "{{h}}h {{m}}m",
+        "ms": "{{m}}m {{s}}s",
+        "s": "{{s}}s"
+      }
     },
     "connectionStatus": {
       "unknown": "Not checked",
@@ -151,4 +207,3 @@
     }
   }
 }
-

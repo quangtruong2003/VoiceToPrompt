@@ -1,5 +1,7 @@
 {
-  "app": { "name": "Voice to Text" },
+  "app": {
+    "name": "Voice to Prompt"
+  },
   "common": {
     "close": "关闭",
     "cancel": "取消",
@@ -29,6 +31,8 @@
       "defaultLanguage": "默认语言",
       "hotkey": "录音快捷键",
       "changeHotkey": "更改快捷键",
+      "historyHotkey": "历史记录快捷键",
+      "changeHistoryHotkey": "更改快捷键",
       "pressNewHotkey": "按下新的快捷键...",
       "hotkeyHint": "输入新的组合键（至少 2 个键）",
       "needAtLeast2Keys": "至少需要 2 个键（例如：Ctrl+Space）",
@@ -78,6 +82,60 @@
       "keep": "保持原样",
       "toDigits": "转换为数字 (1, 2, 3)",
       "saved": "设置已保存！"
+    },
+    "performance": {
+      "overview": "概览",
+      "uptime": "运行时间",
+      "totalRequests": "总请求",
+      "successRate": "成功率",
+      "avgLatency": "平均延迟",
+      "timeSaved": "节省时间",
+      "latencyAnalysis": "延迟分析",
+      "noLatencyData": "暂无延迟数据",
+      "apiUsage": "API 使用量",
+      "requestsCount": "{{count}} 个请求",
+      "lastNRequests": "最后 {{count}} 个请求",
+      "latencyMs": "延迟 (ms)",
+      "noApiData": "未记录 API 呼叫",
+      "optimizations": "优化功能",
+      "statistics": "统计信息",
+      "resetMetrics": "重置指标",
+      "connection": "连接",
+      "tls": "TLS",
+      "request": "请求",
+      "response": "响应",
+      "processing": "处理",
+      "compression": "压缩",
+      "total": "总计",
+      "apiCallDetails": "API 呼叫详情",
+      "endpoint": "端点",
+      "method": "方法",
+      "status": "状态",
+      "time": "时间",
+      "latencyBreakdown": "延迟细分",
+      "connectionPool": "连接池",
+      "connectionPoolHint": "重用 HTTP 连接以减少延迟",
+      "compressionFeature": "数据压缩",
+      "compressionHint": "压缩请求/响应数据",
+      "caching": "缓存",
+      "cachingHint": "为重复请求缓存 API 响应",
+      "asyncProcessing": "异步处理",
+      "asyncProcessingHint": "异步处理请求",
+      "connectionReuse": "连接重用",
+      "compressionRatio": "压缩比",
+      "cacheHitRate": "缓存命中率",
+      "totalProcessed": "处理总数",
+      "timeAgo": {
+        "seconds": "{{time}} 秒前",
+        "minutes": "{{time}} 分钟前",
+        "hours": "{{time}} 小时前"
+      },
+      "uptimeFormat": {
+        "dh": "{{d}} 天 {{h}} 小时",
+        "hm": "{{h}} 小时 {{m}} 分钟",
+        "ms": "{{m}} 分钟 {{s}} 秒",
+        "s": "{{s}} 秒"
+      }
     },
     "connectionStatus": {
       "unknown": "未检查",
@@ -148,4 +206,3 @@
     }
   }
 }
-

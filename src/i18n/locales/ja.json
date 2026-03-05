@@ -1,5 +1,7 @@
 {
-  "app": { "name": "Voice to Text" },
+  "app": {
+    "name": "Voice to Prompt"
+  },
   "common": {
     "close": "閉じる",
     "cancel": "キャンセル",
@@ -29,6 +31,8 @@
       "defaultLanguage": "既定の言語",
       "hotkey": "録音ショートカット",
       "changeHotkey": "ショートカット変更",
+      "historyHotkey": "履歴のショートカット",
+      "changeHistoryHotkey": "ショートカット変更",
       "pressNewHotkey": "新しいショートカットを押してください...",
       "hotkeyHint": "新しいキー組み合わせ（2キー以上）",
       "needAtLeast2Keys": "2キー以上が必要です（例: Ctrl+Space）",
@@ -78,6 +82,60 @@
       "keep": "そのまま",
       "toDigits": "数字に変換（1, 2, 3）",
       "saved": "設定を保存しました！"
+    },
+    "performance": {
+      "overview": "概要",
+      "uptime": "稼働時間",
+      "totalRequests": "合計リクエスト",
+      "successRate": "成功率",
+      "avgLatency": "平均レイテンシ",
+      "timeSaved": "節約された時間",
+      "latencyAnalysis": "レイテンシ分析",
+      "noLatencyData": "レイテンシデータなし",
+      "apiUsage": "API使用量",
+      "requestsCount": "{{count}} リクエスト",
+      "lastNRequests": "過去{{count}}件のリクエスト",
+      "latencyMs": "レイテンシ (ms)",
+      "noApiData": "API呼び出し記録なし",
+      "optimizations": "最適化機能",
+      "statistics": "統計",
+      "resetMetrics": "メトリクスのリセット",
+      "connection": "接続",
+      "tls": "TLS",
+      "request": "リクエスト",
+      "response": "レスポンス",
+      "processing": "処理",
+      "compression": "圧縮",
+      "total": "合計",
+      "apiCallDetails": "APIコールの詳細",
+      "endpoint": "エンドポイント",
+      "method": "メソッド",
+      "status": "ステータス",
+      "time": "時間",
+      "latencyBreakdown": "レイテンシの内訳",
+      "connectionPool": "接続プール",
+      "connectionPoolHint": "HTTP接続を再利用してレイテンシを削減",
+      "compressionFeature": "データ圧縮",
+      "compressionHint": "リクエスト/レスポンスデータを圧縮",
+      "caching": "キャッシング",
+      "cachingHint": "繰り返しのリクエストのためにAPIレスポンスをキャッシュ",
+      "asyncProcessing": "非同期処理",
+      "asyncProcessingHint": "リクエストを非同期で処理する",
+      "connectionReuse": "接続の再利用",
+      "compressionRatio": "圧縮率",
+      "cacheHitRate": "キャッシュヒット率",
+      "totalProcessed": "合計処理数",
+      "timeAgo": {
+        "seconds": "{{time}}秒前",
+        "minutes": "{{time}}分前",
+        "hours": "{{time}}時間前"
+      },
+      "uptimeFormat": {
+        "dh": "{{d}}日 {{h}}時間",
+        "hm": "{{h}}時間 {{m}}分",
+        "ms": "{{m}}分 {{s}}秒",
+        "s": "{{s}}秒"
+      }
     },
     "connectionStatus": {
       "unknown": "未確認",
@@ -148,4 +206,3 @@
     }
   }
 }
-

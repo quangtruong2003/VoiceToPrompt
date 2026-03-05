@@ -271,6 +271,8 @@ export function SettingsView() {
 
     const [hotkey, setHotkey] = useState({ win: false, alt: false, ctrl: true, shift: false, key: 'Space' })
     const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
+    const [historyHotkey, setHistoryHotkey] = useState({ win: false, alt: true, ctrl: false, shift: false, key: 'V' })
+    const [isRecordingHistoryHotkey, setIsRecordingHistoryHotkey] = useState(false)
 
     useEffect(() => {
         if (!window.electronAPI) return
@@ -306,6 +308,16 @@ export function SettingsView() {
                     ctrl: parts.includes('Control'),
                     shift: parts.includes('Shift'),
                     key: parts.find(p => !['Win', 'Alt', 'Control', 'Ctrl', 'Shift'].includes(p)) || 'Space'
+                })
+            }
+            if (config.historyHotkey) {
+                const parts = config.historyHotkey.split('+')
+                setHistoryHotkey({
+                    win: parts.includes('Win'),
+                    alt: parts.includes('Alt'),
+                    ctrl: parts.includes('Control'),
+                    shift: parts.includes('Shift'),
+                    key: parts.find(p => !['Win', 'Alt', 'Control', 'Ctrl', 'Shift'].includes(p)) || 'V'
                 })
             }
         })
@@ -424,7 +436,7 @@ export function SettingsView() {
         window.electronAPI.closeSettings()
     }
     const handleHotkeyCapture = useCallback((e: KeyboardEvent) => {
-        if (!isRecordingHotkey) return
+        if (!isRecordingHotkey && !isRecordingHistoryHotkey) return
 
         e.preventDefault()
         e.stopPropagation()
@@ -454,27 +466,40 @@ export function SettingsView() {
         }
 
         const hotkeyString = hotkeyParts.join('+')
-        setHotkey({
-            win: hotkeyString.includes('Win'),
-            alt: hotkeyString.includes('Alt'),
-            ctrl: hotkeyString.includes('Control'),
-            shift: hotkeyString.includes('Shift'),
-            key: finalKey
-        })
 
-        window.electronAPI.saveConfig({ hotkey: hotkeyString })
-        window.electronAPI.registerHotkey(hotkeyString)
+        if (isRecordingHotkey) {
+            setHotkey({
+                win: hotkeyString.includes('Win'),
+                alt: hotkeyString.includes('Alt'),
+                ctrl: hotkeyString.includes('Control'),
+                shift: hotkeyString.includes('Shift'),
+                key: finalKey
+            })
+            window.electronAPI.saveConfig({ hotkey: hotkeyString })
+            window.electronAPI.registerHotkey(hotkeyString)
+            setIsRecordingHotkey(false)
+        } else if (isRecordingHistoryHotkey) {
+            setHistoryHotkey({
+                win: hotkeyString.includes('Win'),
+                alt: hotkeyString.includes('Alt'),
+                ctrl: hotkeyString.includes('Control'),
+                shift: hotkeyString.includes('Shift'),
+                key: finalKey
+            })
+            window.electronAPI.saveConfig({ historyHotkey: hotkeyString })
+            window.electronAPI.registerHistoryHotkey(hotkeyString)
+            setIsRecordingHistoryHotkey(false)
+        }
 
-        setIsRecordingHotkey(false)
         showToast(t('settings.toast.hotkeySaved', { hotkey: hotkeyString }), 'success')
-    }, [isRecordingHotkey, showToast, t])
+    }, [isRecordingHotkey, isRecordingHistoryHotkey, showToast, t])
 
     useEffect(() => {
-        if (isRecordingHotkey) {
+        if (isRecordingHotkey || isRecordingHistoryHotkey) {
             window.addEventListener('keydown', handleHotkeyCapture)
             return () => window.removeEventListener('keydown', handleHotkeyCapture)
         }
-    }, [isRecordingHotkey, handleHotkeyCapture])
+    }, [isRecordingHotkey, isRecordingHistoryHotkey, handleHotkeyCapture])
 
     const getCurrentHotkeyDisplay = () => {
         const parts = []
@@ -514,7 +539,7 @@ export function SettingsView() {
                                     <span className="list-item-label">{t('settings.general.hotkey')}</span>
                                 </div>
                             </div>
-                            <div className="list-grouped-item no-border">
+                            <div className="list-grouped-item">
                                 <div className="hotkey-capture">
                                     {isRecordingHotkey ? (
                                         <div className="hotkey-recording">
@@ -553,6 +578,55 @@ export function SettingsView() {
                                                 onClick={() => setIsRecordingHotkey(true)}
                                             >
                                                 {t('settings.general.changeHotkey')}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="list-grouped-item">
+                                <div className="list-item-left">
+                                    <span className="list-item-label">{t('settings.general.historyHotkey')}</span>
+                                </div>
+                            </div>
+                            <div className="list-grouped-item no-border">
+                                <div className="hotkey-capture">
+                                    {isRecordingHistoryHotkey ? (
+                                        <div className="hotkey-recording">
+                                            <span className="recording-indicator"></span>
+                                            <span>{t('settings.general.pressNewHotkey')}</span>
+                                            <button
+                                                className="btn btn-ghost btn-small"
+                                                onClick={() => setIsRecordingHistoryHotkey(false)}
+                                            >
+                                                {t('common.cancel')}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="hotkey-display-setting">
+                                            <div className="current-hotkey">
+                                                {historyHotkey.ctrl && <>
+                                                    <kbd>Ctrl</kbd>
+                                                    <span>+</span>
+                                                </>}
+                                                {historyHotkey.win && <>
+                                                    <kbd>Win</kbd>
+                                                    <span>+</span>
+                                                </>}
+                                                {historyHotkey.alt && <>
+                                                    <kbd>Alt</kbd>
+                                                    <span>+</span>
+                                                </>}
+                                                {historyHotkey.shift && <>
+                                                    <kbd>Shift</kbd>
+                                                    <span>+</span>
+                                                </>}
+                                                <kbd>{historyHotkey.key}</kbd>
+                                            </div>
+                                            <button
+                                                className="btn btn-primary btn-small"
+                                                onClick={() => setIsRecordingHistoryHotkey(true)}
+                                            >
+                                                {t('settings.general.changeHistoryHotkey')}
                                             </button>
                                         </div>
                                     )}

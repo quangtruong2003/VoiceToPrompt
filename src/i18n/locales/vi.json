@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Voice to Text"
+    "name": "Voice to Prompt"
   },
   "common": {
     "close": "Đóng",
@@ -31,6 +31,8 @@
       "defaultLanguage": "Ngôn ngữ mặc định",
       "hotkey": "Phím tắt ghi âm",
       "changeHotkey": "Đổi phím tắt",
+      "historyHotkey": "Phím tắt Lịch sử",
+      "changeHistoryHotkey": "Đổi phím tắt",
       "pressNewHotkey": "Nhấn phím tắt mới...",
       "hotkeyHint": "Nhấn tổ hợp phím mới (cần ít nhất 2 phím)",
       "needAtLeast2Keys": "Cần ít nhất 2 phím (ví dụ: Ctrl+Space)",
@@ -80,6 +82,60 @@
       "keep": "Giữ nguyên",
       "toDigits": "Chuyển thành số (1, 2, 3)",
       "saved": "Đã lưu cài đặt!"
+    },
+    "performance": {
+      "overview": "Tổng quan",
+      "uptime": "Hoạt động",
+      "totalRequests": "Tổng yêu cầu",
+      "successRate": "Tỷ lệ thành công",
+      "avgLatency": "Độ trễ TB",
+      "timeSaved": "Tiết kiệm thời gian",
+      "latencyAnalysis": "Phân tích độ trễ",
+      "noLatencyData": "Chưa có dữ liệu độ trễ",
+      "apiUsage": "Mức sử dụng API",
+      "requestsCount": "{{count}} yêu cầu",
+      "lastNRequests": "{{count}} yêu cầu gần nhất",
+      "latencyMs": "Độ trễ (ms)",
+      "noApiData": "Chưa có cuộc gọi API nào được ghi lại",
+      "optimizations": "Tính năng tối ưu hóa",
+      "statistics": "Thống kê",
+      "resetMetrics": "Đặt lại chỉ số",
+      "connection": "Kết nối",
+      "tls": "TLS",
+      "request": "Yêu cầu",
+      "response": "Phản hồi",
+      "processing": "Xử lý",
+      "compression": "Nén",
+      "total": "Tổng",
+      "apiCallDetails": "Chi tiết API",
+      "endpoint": "Đường dẫn",
+      "method": "Phương thức",
+      "status": "Trạng thái",
+      "time": "Thời gian",
+      "latencyBreakdown": "Chi tiết độ trễ",
+      "connectionPool": "Connection Pool",
+      "connectionPoolHint": "Tái sử dụng kết nối HTTP để giảm độ trễ",
+      "compressionFeature": "Nén dữ liệu",
+      "compressionHint": "Nén dữ liệu yêu cầu/phản hồi",
+      "caching": "Bộ nhớ đệm",
+      "cachingHint": "Lưu vào bộ nhớ đệm API cho các yêu cầu lặp lại",
+      "asyncProcessing": "Xử lý bất đồng bộ",
+      "asyncProcessingHint": "Xử lý các yêu cầu một cách bất đồng bộ",
+      "connectionReuse": "Tái sử dụng kết nối",
+      "compressionRatio": "Tỷ lệ nén",
+      "cacheHitRate": "Tỷ lệ trúng Cache",
+      "totalProcessed": "Tổng đã xử lý",
+      "timeAgo": {
+        "seconds": "{{time}} giây trước",
+        "minutes": "{{time}} phút trước",
+        "hours": "{{time}} giờ trước"
+      },
+      "uptimeFormat": {
+        "dh": "{{d}} ngày {{h}} giờ",
+        "hm": "{{h}} giờ {{m}} phút",
+        "ms": "{{m}} phút {{s}} giây",
+        "s": "{{s}} giây"
+      }
     },
     "connectionStatus": {
       "unknown": "Chưa kiểm tra",
@@ -151,4 +207,3 @@
     }
   }
 }
-
