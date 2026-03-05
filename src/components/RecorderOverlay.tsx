@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
+import { decodeAudioToFloat32 } from '../utils/audioUtils'
 
 const LANGUAGES = [
     { code: 'vi', label: 'Tiếng Việt' },
@@ -51,6 +52,7 @@ export function RecorderOverlay() {
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
     // Preserve recording data during API errors
     const [preservedBlob, setPreservedBlob] = useState<Blob | null>(null)
+    const [transcriptionEngine, setTranscriptionEngine] = useState<'gemini' | 'whisper'>('gemini')
 
     const [isValidating, setIsValidating] = useState(false)
     const [hotkey, setHotkey] = useState({ ctrl: true, win: false, alt: false, key: 'Space' })
@@ -84,42 +86,14 @@ export function RecorderOverlay() {
         setAppState('processing')
 
         try {
-            const arrayBuffer = await blob.arrayBuffer()
-            const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
-
-            if (result.success && result.text) {
-                setTranscript(result.text)
-                setPreservedBlob(null) // Clear preserved blob after success
-                setAppState('result')
+            let result: { success: boolean; text?: string; error?: string }
+            if (transcriptionEngine === 'whisper') {
+                const pcmData = await decodeAudioToFloat32(blob)
+                result = await window.electronAPI.transcribeWhisperAudio(pcmData, language)
             } else {
-                if (result.error === 'NO_API_KEY') {
-                    showToast('Chưa cấu hình API Key', 'error')
-                    setAppState('settings')
-                    return
-                }
-                if (result.error === 'INVALID_API_KEY') {
-                    showToast('API Key không hợp lệ', 'error')
-                    setAppState('settings')
-                    return
-                }
-                // Show error in toast, preserve recording data for retry
-                showToast(result.error || 'Lỗi xử lý', 'error')
-                setAppState('idle')
+                const arrayBuffer = await blob.arrayBuffer()
+                result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
             }
-        } catch (err) {
-            showToast('Lỗi kết nối tới API', 'error')
-            setAppState('idle')
-        }
-    }, [stopRecording, language, showToast])
-
-    // Retry transcription with preserved recording data
-    const handleRetryTranscribe = useCallback(async () => {
-        if (!preservedBlob) return
-
-        setAppState('processing')
-        try {
-            const arrayBuffer = await preservedBlob.arrayBuffer()
-            const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
 
             if (result.success && result.text) {
                 setTranscript(result.text)
@@ -143,13 +117,53 @@ export function RecorderOverlay() {
             showToast('Lỗi kết nối tới API', 'error')
             setAppState('idle')
         }
-    }, [preservedBlob, language, showToast])
+    }, [stopRecording, language, showToast, transcriptionEngine])
+
+    // Retry transcription with preserved recording data
+    const handleRetryTranscribe = useCallback(async () => {
+        if (!preservedBlob) return
+
+        setAppState('processing')
+        try {
+            let result: { success: boolean; text?: string; error?: string }
+            if (transcriptionEngine === 'whisper') {
+                const pcmData = await decodeAudioToFloat32(preservedBlob)
+                result = await window.electronAPI.transcribeWhisperAudio(pcmData, language)
+            } else {
+                const arrayBuffer = await preservedBlob.arrayBuffer()
+                result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
+            }
+
+            if (result.success && result.text) {
+                setTranscript(result.text)
+                setPreservedBlob(null)
+                setAppState('result')
+            } else {
+                if (result.error === 'NO_API_KEY') {
+                    showToast('Chưa cấu hình API Key', 'error')
+                    setAppState('settings')
+                    return
+                }
+                if (result.error === 'INVALID_API_KEY') {
+                    showToast('API Key không hợp lệ', 'error')
+                    setAppState('settings')
+                    return
+                }
+                showToast(result.error || 'Lỗi xử lý', 'error')
+                setAppState('idle')
+            }
+        } catch (err) {
+            showToast('Lỗi kết nối tới API', 'error')
+            setAppState('idle')
+        }
+    }, [preservedBlob, language, showToast, transcriptionEngine])
 
     useEffect(() => {
         if (!window.electronAPI) return
         window.electronAPI.getConfig().then((config) => {
             if (config.apiKey) setApiKey(config.apiKey)
             if (config.language) setLanguage(config.language)
+            if (config.transcriptionEngine) setTranscriptionEngine(config.transcriptionEngine)
             if (config.hotkey) {
                 const parts = config.hotkey.split('+')
                 setHotkey({

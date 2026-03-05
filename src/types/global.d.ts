@@ -135,6 +135,7 @@ interface ElectronAPI {
   onForceStopRecording: (callback: () => void) => () => void
   onForceCancelRecording: (callback: () => void) => () => void
   transcribeAudio: (audioBuffer: ArrayBuffer, language: string) => Promise<{ success: boolean; text?: string; error?: string }>
+  transcribeWhisperAudio: (pcmFloat32: Float32Array, language: string) => Promise<{ success: boolean; text?: string; error?: string }>
   injectText: (text: string) => void
   cancelRecording: () => void
   onInjectionComplete: (callback: (result: { success: boolean }) => void) => () => void
@@ -149,6 +150,7 @@ interface ElectronAPI {
   getGeminiModels: () => Promise<{ models: { name: string; displayName: string; description: string; version: string; supportsAudio?: boolean }[] }>
   getWhisperModels: () => Promise<{ models: { id: string; name: string; size: string }[] }>
   downloadWhisperModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
+  deleteWhisperModel: (modelId: string) => Promise<{ success: boolean; error?: string }>
   selectWhisperModelFolder: () => Promise<{ success: boolean; path?: string }>
   checkWhisperModelDownloaded: (modelId: string) => Promise<{ downloaded: boolean }>
   onWhisperDownloadProgress: (callback: (progress: { modelId: string; status: string; progress?: number }) => void) => () => void

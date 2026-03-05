@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('transcribe-audio', audioBuffer, language)
   },
 
+  transcribeWhisperAudio: (pcmFloat32: Float32Array, language: string) => {
+    return ipcRenderer.invoke('transcribe-whisper-audio', Array.from(pcmFloat32), language)
+  },
+
   injectText: (text: string) => {
     ipcRenderer.send('inject-text', text)
   },
@@ -85,6 +89,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   selectWhisperModelFolder: () => {
     return ipcRenderer.invoke('select-whisper-model-folder')
+  },
+
+  deleteWhisperModel: (modelId: string) => {
+    return ipcRenderer.invoke('delete-whisper-model', modelId)
   },
 
   checkWhisperModelDownloaded: (modelId: string) => {

@@ -824,8 +824,9 @@ async function transcribeAudio(audioBuffer: ArrayBuffer, language: string): Prom
   const config = loadConfig()
   const base64Audio = Buffer.from(audioBuffer).toString('base64')
 
-  // Always use prompt from settings
-  const promptText = config.customPrompt?.trim() || ''
+  // Always use prompt from settings, or a firm default to prevent describing audio
+  const defaultPrompt = 'You are a transcription assistant. Your only job is to exactly transcribe the spoken words in this audio into text in the original language. Do not describe the audio, background noise, or speakers. Do not add metadata, translations, or commentary. Output ONLY the transcribed text.'
+  const promptText = config.customPrompt?.trim() || defaultPrompt
 
   const payload = {
     contents: [{
@@ -923,27 +924,14 @@ async function getWhisperPipeline(modelId: string) {
   return whisperPipeline
 }
 
-async function transcribeWithWhisper(audioBuffer: ArrayBuffer, language: string): Promise<string> {
+async function transcribeWithWhisper(pcmFloat32: Float32Array, language: string): Promise<string> {
   const config = loadConfig()
   const modelId = config.whisperModel || 'onnx-community/whisper-small'
 
   const pipe = await getWhisperPipeline(modelId)
 
-  // Convert WebM ArrayBuffer to Float32Array at 16kHz mono
-  // Whisper expects 16kHz mono Float32Array
-  const WaveFile = require('wavefile').WaveFile
-  const audioData = await convertAudioToFloat32(Buffer.from(audioBuffer), WaveFile)
-
-  const langMap: Record<string, string> = {
-    'vi': 'vietnamese',
-    'en': 'english',
-    'ja': 'japanese',
-    'ko': 'korean',
-    'zh': 'chinese',
-  }
-
-  const result = await pipe(audioData, {
-    language: langMap[language] || 'vietnamese',
+  // No language specified → Whisper auto-detects, supports mixed languages in one recording
+  const result = await pipe(pcmFloat32, {
     task: 'transcribe',
   })
 
@@ -953,69 +941,6 @@ async function transcribeWithWhisper(audioBuffer: ArrayBuffer, language: string)
   return formatText(rawText, punctuationSettings)
 }
 
-async function convertAudioToFloat32(audioBuffer: Buffer, WaveFile: any): Promise<Float32Array> {
-  // Try to decode as WAV first
-  try {
-    const wav = new WaveFile(audioBuffer)
-    wav.toBitDepth('32f')
-    wav.toSampleRate(16000)
-    let samples = wav.getSamples()
-    if (Array.isArray(samples)) {
-      if (samples.length > 1) {
-        const SCALING_FACTOR = Math.sqrt(2)
-        for (let i = 0; i < samples[0].length; ++i) {
-          samples[0][i] = (SCALING_FACTOR * (samples[0][i] + samples[1][i])) / 2
-        }
-      }
-      samples = samples[0]
-    }
-    return samples
-  } catch {
-    // If not WAV (e.g. WebM from browser recording), use ffmpeg or raw conversion
-    // For WebM: use the raw audio data approach
-    // The browser's MediaRecorder outputs WebM/Opus, we need to convert to PCM
-    // Use a simple approach: write to temp file, use ffmpeg if available, otherwise try raw decode
-    const tempDir = path.join(app.getPath('temp'), 'whisper-audio')
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
-
-    const inputPath = path.join(tempDir, `input-${Date.now()}.webm`)
-    const outputPath = path.join(tempDir, `output-${Date.now()}.wav`)
-    fs.writeFileSync(inputPath, audioBuffer)
-
-    try {
-      // Try ffmpeg conversion
-      const { execSync } = require('child_process')
-      execSync(`ffmpeg -y -i "${inputPath}" -ar 16000 -ac 1 -f wav "${outputPath}"`, {
-        stdio: 'pipe',
-        timeout: 30000,
-      })
-      const wavBuffer = fs.readFileSync(outputPath)
-      const wav = new WaveFile(wavBuffer)
-      wav.toBitDepth('32f')
-      let samples = wav.getSamples()
-      if (Array.isArray(samples)) samples = samples[0]
-
-      // Cleanup
-      try { fs.unlinkSync(inputPath) } catch {}
-      try { fs.unlinkSync(outputPath) } catch {}
-
-      return samples
-    } catch {
-      // Cleanup on failure
-      try { fs.unlinkSync(inputPath) } catch {}
-      try { fs.unlinkSync(outputPath) } catch {}
-
-      // Fallback: create a simple Float32Array from audio bytes
-      // This is a rough conversion and may not work perfectly
-      const float32 = new Float32Array(audioBuffer.length / 2)
-      const view = new DataView(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength)
-      for (let i = 0; i < float32.length; i++) {
-        float32[i] = view.getInt16(i * 2, true) / 32768.0
-      }
-      return float32
-    }
-  }
-}
 
 /**
  * Format text based on punctuation settings
@@ -1277,7 +1202,8 @@ function setupIPC() {
       let text: string
 
       if (config.transcriptionEngine === 'whisper') {
-        text = await transcribeWithWhisper(audioBuffer, language)
+        // Legacy path: should not reach here with new renderer, but kept for safety
+        text = 'Error: Whisper engine should use transcribe-whisper-audio channel'
       } else {
         text = await transcribeAudio(audioBuffer, language)
       }
@@ -1290,6 +1216,20 @@ function setupIPC() {
       } else {
         dialog.showErrorBox('Voice to Text - Lỗi xử lý giọng nói', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
       }
+      return { success: false, error: msg }
+    }
+  })
+
+  ipcMain.handle('transcribe-whisper-audio', async (_event, pcmArray: number[], language: string) => {
+    isRecording = false
+    unregisterRecordingShortcuts()
+    try {
+      const pcmFloat32 = new Float32Array(pcmArray)
+      const text = await transcribeWithWhisper(pcmFloat32, language)
+      return { success: true, text }
+    } catch (error: any) {
+      const msg = error.message || 'Unknown error'
+      dialog.showErrorBox('Voice to Text - Lỗi Whisper', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
       return { success: false, error: msg }
     }
   })
@@ -1410,6 +1350,20 @@ function setupIPC() {
       return { downloaded: exists }
     } catch {
       return { downloaded: false }
+    }
+  })
+
+  ipcMain.handle('delete-whisper-model', async (_event, modelId: string) => {
+    try {
+      const cacheDir = getWhisperCacheDir()
+      const modelPath = path.join(cacheDir, modelId)
+      if (fs.existsSync(modelPath)) {
+        fs.rmSync(modelPath, { recursive: true, force: true })
+      }
+      return { success: true }
+    } catch (error: any) {
+      console.error('Failed to delete whisper model:', error)
+      return { success: false, error: error.message || 'Delete failed' }
     }
   })
 

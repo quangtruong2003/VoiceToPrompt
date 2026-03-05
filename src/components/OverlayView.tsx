@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { addToHistory } from '../lib/transcription-history'
 import { useI18n, AppLanguage } from '../i18n'
+import { decodeAudioToFloat32 } from '../utils/audioUtils'
 
 const LANGUAGES = [
     { code: 'vi', label: 'VI' },
@@ -49,6 +50,7 @@ export function OverlayView() {
     const [error, setError] = useState<string | null>(null)
     const [isVisible, setIsVisible] = useState(false)
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
+    const [transcriptionEngine, setTranscriptionEngine] = useState<'gemini' | 'whisper'>('gemini')
 
     const [recordingDuration, setRecordingDuration] = useState(0)
     // Preserve recording data during API errors
@@ -84,8 +86,14 @@ export function OverlayView() {
         setRecordingDuration(currentDuration)
         setState('processing')
         try {
-            const arrayBuffer = await blob.arrayBuffer()
-            const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
+            let result: { success: boolean; text?: string; error?: string }
+            if (transcriptionEngine === 'whisper') {
+                const pcmData = await decodeAudioToFloat32(blob)
+                result = await window.electronAPI.transcribeWhisperAudio(pcmData, language)
+            } else {
+                const arrayBuffer = await blob.arrayBuffer()
+                result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
+            }
             if (result.success && result.text) {
                 const trimmedText = result.text.trim()
                 addToHistory({
@@ -105,7 +113,7 @@ export function OverlayView() {
             showToast(t('overlay.apiConnectionError'), 'error')
             setState('idle')
         }
-    }, [stopRecording, duration, language, showToast, t])
+    }, [stopRecording, duration, language, showToast, t, transcriptionEngine])
 
 
 
@@ -115,8 +123,14 @@ export function OverlayView() {
 
         setState('processing')
         try {
-            const arrayBuffer = await preservedBlob.arrayBuffer()
-            const result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
+            let result: { success: boolean; text?: string; error?: string }
+            if (transcriptionEngine === 'whisper') {
+                const pcmData = await decodeAudioToFloat32(preservedBlob)
+                result = await window.electronAPI.transcribeWhisperAudio(pcmData, language)
+            } else {
+                const arrayBuffer = await preservedBlob.arrayBuffer()
+                result = await window.electronAPI.transcribeAudio(arrayBuffer, language)
+            }
             if (result.success && result.text) {
                 const trimmedText = result.text.trim()
                 addToHistory({
@@ -136,13 +150,14 @@ export function OverlayView() {
             showToast(t('overlay.apiConnectionError'), 'error')
             setState('idle')
         }
-    }, [preservedBlob, language, showToast, t])
+    }, [preservedBlob, language, showToast, t, transcriptionEngine])
 
     useEffect(() => {
         if (!window.electronAPI) return
         window.electronAPI.getConfig().then((config) => {
             if (config.language) setLanguage(config.language as AppLanguage)
             if (config.audioDeviceId) setAudioDeviceId(config.audioDeviceId)
+            if (config.transcriptionEngine) setTranscriptionEngine(config.transcriptionEngine)
         })
 
         const cleanupToggle = window.electronAPI.onToggleRecording((shouldRecord: boolean) => {

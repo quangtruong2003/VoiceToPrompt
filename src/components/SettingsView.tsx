@@ -254,6 +254,7 @@ export function SettingsView() {
     const [transcriptionEngine, setTranscriptionEngine] = useState<'gemini' | 'whisper'>('gemini')
     const [whisperModel, setWhisperModel] = useState('onnx-community/whisper-small')
     const [whisperModels, setWhisperModels] = useState<{ id: string; name: string; size: string }[]>([])
+    const [isDeletingWhisper, setIsDeletingWhisper] = useState(false)
     const [isDownloadingWhisper, setIsDownloadingWhisper] = useState(false)
     const [whisperDownloadStatus, setWhisperDownloadStatus] = useState<string>('')
     const [whisperModelPath, setWhisperModelPath] = useState<string>('')
@@ -406,6 +407,29 @@ export function SettingsView() {
             showToast(t('settings.engine.downloadError'), 'error')
         } finally {
             setIsDownloadingWhisper(false)
+        }
+    }
+
+    const handleDeleteWhisperModel = async () => {
+        if (!confirm(t('settings.engine.confirmDeleteModel'))) return
+        setIsDeletingWhisper(true)
+        try {
+            const result = await window.electronAPI.deleteWhisperModel(whisperModel)
+            if (result.success) {
+                setDownloadedModels(prev => {
+                    const next = new Set(prev)
+                    next.delete(whisperModel)
+                    return next
+                })
+                showToast(t('settings.engine.deleteSuccess'), 'success')
+            } else {
+                showToast(t('settings.engine.deleteError') + ': ' + (result.error || ''), 'error')
+            }
+        } catch (err: any) {
+            console.error('Lỗi khi xóa model:', err)
+            showToast(t('settings.engine.deleteError'), 'error')
+        } finally {
+            setIsDeletingWhisper(false)
         }
     }
 
@@ -879,12 +903,30 @@ export function SettingsView() {
                                             </select>
                                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                                 {downloadedModels.has(whisperModel) ? (
-                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)', padding: '4px 10px', borderRadius: 6, fontWeight: 500 }}>
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                            <polyline points="20 6 9 17 4 12" />
-                                                        </svg>
-                                                        {t('settings.engine.downloaded')}
-                                                    </span>
+                                                    <>
+                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)', padding: '4px 10px', borderRadius: 6, fontWeight: 500 }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                <polyline points="20 6 9 17 4 12" />
+                                                            </svg>
+                                                            {t('settings.engine.downloaded')}
+                                                        </span>
+                                                        <button
+                                                            className="btn btn-ghost btn-small error"
+                                                            onClick={handleDeleteWhisperModel}
+                                                            disabled={isDeletingWhisper}
+                                                            title={t('settings.engine.deleteModel')}
+                                                            style={{ padding: '6px', minWidth: 'unset', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                        >
+                                                            {isDeletingWhisper ? (
+                                                                <span className="btn-spinner" style={{ width: 14, height: 14 }}></span>
+                                                            ) : (
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M3 6h18"></path>
+                                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                    </>
                                                 ) : (
                                                     <>
                                                         <button
