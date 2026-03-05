@@ -146,6 +146,7 @@ interface ElectronAPI {
   checkForUpdate: () => Promise<{ updateAvailable: boolean; latestVersion?: string; error?: string }>
   registerHotkey: (hotkey: string) => void
   registerHistoryHotkey: (hotkey: string) => void
+  registerSettingsHotkey: (hotkey: string) => void
   validateApiKey: (apiKey: string) => Promise<{valid: boolean, error?: string}>
   getGeminiModels: () => Promise<{ models: { name: string; displayName: string; description: string; version: string; supportsAudio?: boolean }[] }>
   getWhisperModels: () => Promise<{ models: { id: string; name: string; size: string }[] }>

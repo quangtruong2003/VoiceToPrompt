@@ -1,32 +1,36 @@
-# Voice to Text
+# Voice to Prompt
 
 A professional, high-performance voice dictation application for Windows that converts speech to text in real-time using Google's Gemini AI API. Built with Electron, React, and TypeScript.
 
 ## Overview
 
-Voice to Text is a desktop application designed for seamless speech-to-text transcription. It runs as a system tray application with a floating overlay window, allowing users to dictate text directly into any application. The application features ultra-low latency audio processing, multi-provider API support (Google Gemini, Antigravity, and custom endpoints), and automatic text injection into the active application.
+Voice to Prompt is a desktop application designed for seamless speech-to-text transcription. It runs as a system tray application with a floating overlay window, allowing users to dictate text directly into any application. The application features ultra-low latency audio processing, multi-provider API support (Google Gemini, Antigravity, and custom endpoints), and automatic text injection into the active application.
 
 ## Core Features
 
 ### Recording & Transcription
+
 - **Real-time Voice Recording** - Capture audio from microphone with optimal settings for speech recognition (16kHz, mono, Opus encoding)
 - **Automatic Transcription** - Send audio to AI API and receive transcribed text
 - **Multiple API Providers** - Support for Google Gemini, Antigravity, and custom API endpoints
 - **Language Support** - Configurable language setting for transcription accuracy
 
 ### User Interface
+
 - **Floating Overlay Window** - Compact, always-on-top recording indicator that stays out of your way
 - **System Tray Integration** - Runs silently in the system tray with context menu controls
 - **Settings Panel** - Comprehensive configuration for API keys, language, custom prompts, and endpoint settings
 - **Recording Indicator** - Visual feedback showing recording status and duration
 
 ### Automation
+
 - **Global Shortcut** - Press `Super+Alt+H` to toggle recording from anywhere in the system
 - **Enter Key Stop** - Press Enter to immediately stop recording and process audio
 - **Automatic Text Injection** - Automatically pastes transcribed text into the active application using clipboard simulation
 - **Multi-language Support** - Optimized for Vietnamese with support for other languages
 
 ### Performance
+
 - **Low-Latency Audio Pipeline** - Target latency under 50ms from audio capture to API submission
 - **Connection Pooling** - Pre-warmed WebSocket connections for instant API communication
 - **Audio Compression** - Opus encoding at 24kbps for efficient bandwidth usage
@@ -35,25 +39,30 @@ Voice to Text is a desktop application designed for seamless speech-to-text tran
 ## Technology Stack
 
 ### Frontend
+
 - **React 18** - UI framework for component-based interface
 - **TypeScript** - Type-safe development
 - **Vite** - Fast build tool and dev server
 
 ### Desktop
+
 - **Electron 33** - Cross-platform desktop application framework
 - **Electron Builder** - Application packaging and distribution
 
 ### Audio Processing
+
 - **Web Audio API** - Real-time audio capture and processing
 - **MediaRecorder API** - Audio chunking and encoding
 - **Opus Codec** - High-efficiency audio compression
 
 ### AI Integration
+
 - **Google Gemini API** - Primary speech-to-text provider
 - **Antigravity API** - Alternative provider option
 - **Custom Endpoint** - Support for self-hosted or third-party APIs
 
 ### Utilities
+
 - **@nut-tree-fork/nut-js** - Keyboard automation for text injection
 
 ## Prerequisites
@@ -154,10 +163,12 @@ The built executable will be located in the `release` directory.
 ### Settings Panel
 
 Access the settings panel by:
+
 - Right-clicking the system tray icon and selecting "Cài đặt"
 - Clicking the system tray icon (single click)
 
 Available settings:
+
 - **API Key Configuration** - Enter and validate your API key
 - **Language Selection** - Choose the transcription language
 - **Custom Prompt** - Add context hints for better transcription
@@ -260,20 +271,25 @@ For self-hosted or third-party APIs:
 ### Common Issues
 
 **No API Key**
+
 - Solution: Enter your API key in the settings panel or create a `.env` file
 
 **Microphone Not Detected**
+
 - Solution: Ensure microphone permissions are granted in Windows Settings
 
 **Text Not Being Injected**
+
 - Solution: Check that no other application is blocking clipboard access
 
 **Recording Not Starting**
+
 - Solution: Verify global shortcut permissions in Windows
 
 ### Logs
 
 Application logs are available in the developer console when running in development mode. Check for:
+
 - `[VoiceStreamEngine]` - Audio processing logs
 - `[ConnectionPool]` - API connection logs
 - `[PerformanceMonitor]` - Performance metrics
@@ -285,6 +301,7 @@ This project is provided as-is for personal and commercial use. See the LICENSE 
 ## Contributing
 
 Contributions are welcome. Please ensure:
+
 - TypeScript strict mode compliance
 - React best practices
 - Proper error handling

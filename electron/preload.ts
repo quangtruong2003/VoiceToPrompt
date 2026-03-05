@@ -67,6 +67,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('register-history-hotkey', hotkey)
   },
 
+  registerSettingsHotkey: (hotkey: string) => {
+    ipcRenderer.send('register-settings-hotkey', hotkey)
+  },
+
   saveConfig: (config: Record<string, any>) => {
     return ipcRenderer.invoke('save-config', config)
   },

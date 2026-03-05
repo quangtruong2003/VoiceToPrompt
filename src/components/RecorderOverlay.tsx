@@ -44,7 +44,7 @@ export function RecorderOverlay() {
 
     const [appState, setAppState] = useState<AppState>('idle')
     const [isVisible, setIsVisible] = useState(false)
-    const [language, setLanguage] = useState('vi')
+    const [language, setLanguage] = useState('en')
     const [transcript, setTranscript] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [apiKey, setApiKey] = useState('')
@@ -290,8 +290,8 @@ export function RecorderOverlay() {
     if (!isVisible) return null
 
     return (
-        <div className="overlay-container">
-            {/* Toast notification - positioned at top to not block close button */}
+        <>
+            {/* Toast notification - positioned outside overlay, always visible on top */}
             {toast && (
                 <Toast
                     message={toast.message}
@@ -299,7 +299,8 @@ export function RecorderOverlay() {
                     onClose={() => setToast(null)}
                 />
             )}
-            <div className="overlay-card">
+            <div className="overlay-container">
+                <div className="overlay-card">
                 <div className="overlay-header">
                     <div className="header-left">
                         <div className={`recording-dot ${appState === 'recording' ? 'active' : ''} ${appState === 'processing' ? 'processing' : ''}`} />
@@ -308,7 +309,7 @@ export function RecorderOverlay() {
                             {appState === 'processing' && 'Đang xử lý...'}
                             {appState === 'result' && 'Kết quả'}
                             {appState === 'settings' && 'Cài đặt'}
-                            {appState === 'idle' && 'Voice to Text'}
+                            {appState === 'idle' && 'Voice to Prompt'}
                         </span>
                     </div>
                     <div className="header-right">
@@ -448,5 +449,6 @@ export function RecorderOverlay() {
                 </div>
             </div>
         </div>
+        </>
     )
 }

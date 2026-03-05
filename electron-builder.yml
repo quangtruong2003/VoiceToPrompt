@@ -1,5 +1,5 @@
 appId: com.voicetotext.app
-productName: Voice to Text
+productName: Voice to Prompt
 directories:
   output: release
   buildResources: build

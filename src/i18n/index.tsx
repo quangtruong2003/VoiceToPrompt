@@ -48,10 +48,10 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null)
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage>('vi')
+  const [language, setLanguageState] = useState<AppLanguage>('en')
 
   const applyLanguage = useCallback((lang: string) => {
-    const next = (['vi', 'en', 'ja', 'ko', 'zh'] as const).includes(lang as any) ? (lang as AppLanguage) : 'vi'
+    const next = (['vi', 'en', 'ja', 'ko', 'zh'] as const).includes(lang as any) ? (lang as AppLanguage) : 'en'
     setLanguageState(next)
   }, [])
 
@@ -72,10 +72,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [applyLanguage])
 
   const ctx = useMemo<I18nContextValue>(() => {
-    const dict = DICTS[language] || DICTS.vi
+    const dict = DICTS[language] || DICTS.en
     return {
       language,
-      locale: LOCALE_BY_LANG[language] || 'vi-VN',
+      locale: LOCALE_BY_LANG[language] || 'en-US',
       setLanguage: setLanguageState,
       dict,
       t: (key, vars) => translate(dict, key, vars),

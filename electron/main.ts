@@ -36,6 +36,146 @@ const DIST = path.join(__dirname, '../dist')
 const ELECTRON_DIST = path.join(__dirname)
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
 
+// ============================================================
+// i18n FOR MAIN PROCESS (TRAY MENU)
+// ============================================================
+
+type TrayLocaleKey = 
+  | 'selectEngine' | 'geminiApi' | 'whisperLocal'
+  | 'checkUpdates' | 'history' | 'settings'
+  | 'startRecording' | 'stopRecording' | 'exit'
+  | 'updateAvailable' | 'updateMessage' | 'currentVersion' | 'newVersion'
+  | 'noUpdates' | 'noUpdatesMessage' | 'appMinimized'
+
+interface TrayLocale {
+  selectEngine: string
+  geminiApi: string
+  whisperLocal: string
+  checkUpdates: string
+  history: string
+  settings: string
+  startRecording: string
+  stopRecording: string
+  exit: string
+  updateAvailable: string
+  updateMessage: string
+  currentVersion: string
+  newVersion: string
+  noUpdates: string
+  noUpdatesMessage: string
+  appMinimized: string
+}
+
+const TRAY_LOCALES: Record<string, TrayLocale> = {
+  en: {
+    selectEngine: 'Select Engine',
+    geminiApi: 'Gemini API',
+    whisperLocal: 'Whisper Local',
+    checkUpdates: 'Check for Updates',
+    history: 'History',
+    settings: 'Settings',
+    startRecording: 'Start Recording',
+    stopRecording: 'Stop Recording',
+    exit: 'Exit',
+    updateAvailable: 'Update Available',
+    updateMessage: 'Version v{{latest}} is available!',
+    currentVersion: 'Current version: v{{current}}',
+    newVersion: 'New version: v{{latest}}',
+    noUpdates: 'No Updates',
+    noUpdatesMessage: 'You are using the latest version!',
+    appMinimized: 'App minimized to system tray. Click the icon to restore.',
+  },
+  vi: {
+    selectEngine: 'Chọn Engine',
+    geminiApi: 'Gemini API',
+    whisperLocal: 'Whisper Local',
+    checkUpdates: 'Kiểm tra cập nhật',
+    history: 'Lịch sử',
+    settings: 'Cài đặt',
+    startRecording: 'Bắt đầu ghi âm',
+    stopRecording: 'Dừng ghi âm',
+    exit: 'Thoát',
+    updateAvailable: 'Cập nhật có sẵn',
+    updateMessage: 'Phiên bản v{{latest}} đã sẵn sàng!',
+    currentVersion: 'Phiên bản hiện tại: v{{current}}',
+    newVersion: 'Phiên bản mới: v{{latest}}',
+    noUpdates: 'Không có cập nhật',
+    noUpdatesMessage: 'Bạn đang sử dụng phiên bản mới nhất!',
+    appMinimized: 'Ứng dụng đã được thu nhỏ vào system tray. Nhấp vào icon để hiện lại.',
+  },
+  ja: {
+    selectEngine: 'エンジンを選択',
+    geminiApi: 'Gemini API',
+    whisperLocal: 'Whisper (ローカル)',
+    checkUpdates: 'アップデートを確認',
+    history: '履歴',
+    settings: '設定',
+    startRecording: '録音開始',
+    stopRecording: '録音停止',
+    exit: '終了',
+    updateAvailable: 'アップデートあり',
+    updateMessage: 'バージョン v{{latest}} が利用可能です！',
+    currentVersion: '現在のバージョン: v{{current}}',
+    newVersion: '新しいバージョン: v{{latest}}',
+    noUpdates: 'アップデートなし',
+    noUpdatesMessage: '最新バージョンを使用しています！',
+    appMinimized: 'システムはトレイに最小化されました。アイコンをクリックして復元します。',
+  },
+  ko: {
+    selectEngine: '엔진 선택',
+    geminiApi: 'Gemini API',
+    whisperLocal: 'Whisper (로컬)',
+    checkUpdates: '업데이트 확인',
+    history: '기록',
+    settings: '설정',
+    startRecording: '녹음 시작',
+    stopRecording: '녹음 중지',
+    exit: '종료',
+    updateAvailable: '업데이트 가능',
+    updateMessage: '버전 v{{latest}}을(를) 사용할 수 있습니다!',
+    currentVersion: '현재 버전: v{{current}}',
+    newVersion: '새 버전: v{{latest}}',
+    noUpdates: '업데이트 없음',
+    noUpdatesMessage: '최신 버전을 사용 중입니다!',
+    appMinimized: '앱이 시스템 트레이로 최소화되었습니다. 아이콘을 클릭하여 복원하세요.',
+  },
+  zh: {
+    selectEngine: '选择引擎',
+    geminiApi: 'Gemini API',
+    whisperLocal: 'Whisper (本地)',
+    checkUpdates: '检查更新',
+    history: '历史',
+    settings: '设置',
+    startRecording: '开始录音',
+    stopRecording: '停止录音',
+    exit: '退出',
+    updateAvailable: '有可用更新',
+    updateMessage: '版本 v{{latest}} 可用！',
+    currentVersion: '当前版本：v{{current}}',
+    newVersion: '新版本：v{{latest}}',
+    noUpdates: '没有更新',
+    noUpdatesMessage: '您正在使用最新版本！',
+    appMinimized: '应用已最小化到系统托盘。点击图标恢复。',
+  },
+}
+
+function getTrayLocale(lang: string): TrayLocale {
+  return TRAY_LOCALES[lang] || TRAY_LOCALES.en
+}
+
+function tTray(key: TrayLocaleKey, vars?: Record<string, string>): string {
+  const config = loadConfig()
+  const locale = getTrayLocale(config.language)
+  let text = locale[key] || TRAY_LOCALES.en[key] || key
+  
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      text = text.replace(`{{${k}}}`, v)
+    }
+  }
+  return text
+}
+
 // In-memory config cache to avoid repeated disk reads
 let configCache: AppConfig | null = null
 let configLoadTime: number = 0
@@ -50,6 +190,7 @@ interface AppConfig {
   startWithWindows: boolean
   hotkey: string
   historyHotkey: string
+  settingsHotkey: string
   geminiModel: string
   autoUpdate?: boolean
   lastUpdateCheck?: string
@@ -148,15 +289,21 @@ function loadConfig(forceReload = false): AppConfig {
         needsMigration = true
       }
 
+      if (!config.settingsHotkey) {
+        config.settingsHotkey = 'Alt+S'
+        needsMigration = true
+      }
+
       const merged: AppConfig = {
         apiKey: '',
-        language: 'vi',
+        language: 'en',
         customPrompt: '',
         apiType: 'google',
         customEndpoint: '',
         startWithWindows: false,
         hotkey: 'Control+Space',
         historyHotkey: 'Alt+V',
+        settingsHotkey: 'Alt+S',
         geminiModel: 'gemini-2.0-flash',
         transcriptionEngine: 'gemini',
         whisperModel: 'onnx-community/whisper-small',
@@ -179,13 +326,14 @@ function loadConfig(forceReload = false): AppConfig {
   
   const defaultConfig: AppConfig = {
     apiKey: '',
-    language: 'vi',
+    language: 'en',
     customPrompt: '',
     apiType: 'google',
     customEndpoint: '',
     startWithWindows: false,
     hotkey: 'Control+Space',
     historyHotkey: 'Alt+V',
+    settingsHotkey: 'Alt+S',
     geminiModel: 'gemini-2.0-flash',
     transcriptionEngine: 'gemini',
     whisperModel: 'onnx-community/whisper-small',
@@ -306,6 +454,12 @@ function broadcastConfigUpdate(partial: Partial<AppConfig>) {
     if (win && !win.isDestroyed()) {
       win.webContents.send('config-updated', partial)
     }
+  }
+
+  // Rebuild tray menu when language or settingsHotkey changes
+  if (tray && (partial.language !== undefined || partial.settingsHotkey !== undefined)) {
+    currentSettingsHotkey = partial.settingsHotkey || currentSettingsHotkey
+    tray.setContextMenu(buildTrayMenu())
   }
 }
 
@@ -636,30 +790,89 @@ function generateFallbackIcon(size: number, rgb: number[]): Electron.NativeImage
 // SYSTEM TRAY IMPLEMENTATION
 // ============================================================
 
-function createTray() {
-  const trayIcon = createTrayIcon()
-  tray = new Tray(trayIcon)
-  
-  // Set tooltip - shown when hovering over tray icon
-  tray.setToolTip('Voice to Prompt - Click to open')
+/**
+ * Builds the tray context menu with current engine selection
+ */
+function buildTrayMenu(): Electron.Menu {
+  const config = loadConfig()
+  const currentEngine = config.transcriptionEngine || 'gemini'
 
-  // Build context menu with standard options
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Lịch sử',
+      label: tTray('selectEngine'),
+      submenu: [
+        {
+          label: tTray('geminiApi'),
+          type: 'checkbox',
+          checked: currentEngine === 'gemini',
+          click: () => {
+            saveConfig({ transcriptionEngine: 'gemini' })
+            tray?.setContextMenu(buildTrayMenu())
+          },
+        },
+        {
+          label: tTray('whisperLocal'),
+          type: 'checkbox',
+          checked: currentEngine === 'whisper',
+          click: () => {
+            saveConfig({ transcriptionEngine: 'whisper' })
+            tray?.setContextMenu(buildTrayMenu())
+          },
+        },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: tTray('checkUpdates'),
+      click: async () => {
+        try {
+          const currentVersion = app.getVersion()
+          const response = await fetch('https://api.github.com/repos/quangtruong2003/VoiceToPrompt/releases/latest')
+          if (response.ok) {
+            const data = await response.json()
+            const latestVersion = data.tag_name?.replace('v', '') || '0.0.0'
+            
+            const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0
+            if (isUpdateAvailable) {
+              dialog.showMessageBox({
+                type: 'info',
+                title: tTray('updateAvailable'),
+                message: tTray('updateMessage', { latest: latestVersion }),
+                detail: `${tTray('currentVersion', { current: currentVersion })}\n${tTray('newVersion', { latest: latestVersion })}`,
+              })
+            } else {
+              dialog.showMessageBox({
+                type: 'info',
+                title: tTray('noUpdates'),
+                message: tTray('noUpdatesMessage'),
+                detail: tTray('currentVersion', { current: currentVersion }),
+              })
+            }
+          }
+        } catch (err) {
+          console.error('Failed to check for updates:', err)
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: tTray('history'),
+      accelerator: currentHistoryHotkey,
       click: () => createHistoryWindow(),
     },
     {
-      label: 'Cài đặt',
+      label: tTray('settings'),
+      accelerator: currentSettingsHotkey,
       click: () => createSettingsWindow(),
     },
     {
-      label: isRecording ? 'Dừng ghi âm' : 'Bắt đầu ghi âm',
+      label: isRecording ? tTray('stopRecording') : tTray('startRecording'),
+      accelerator: currentActionHotkey,
       click: () => toggleRecording(),
     },
     { type: 'separator' },
     {
-      label: 'Thoát',
+      label: tTray('exit'),
       click: () => {
         app.isQuitting = true
         app.quit()
@@ -667,7 +880,18 @@ function createTray() {
     },
   ])
 
-  tray.setContextMenu(contextMenu)
+  return contextMenu
+}
+
+function createTray() {
+  const trayIcon = createTrayIcon()
+  tray = new Tray(trayIcon)
+
+  // Set tooltip - shown when hovering over tray icon
+  tray.setToolTip('Voice to Prompt - Click to open')
+
+  // Build context menu with standard options
+  tray.setContextMenu(buildTrayMenu())
 
   // Single click opens settings directly
   tray.on('click', () => {
@@ -703,7 +927,7 @@ function handleWindowClose(window: BrowserWindow) {
   if (process.platform === 'win32' && tray) {
     tray.displayBalloon({
       title: 'Voice to Prompt',
-      content: 'Ứng dụng đã được thu nhỏ vào system tray. Nhấp vào icon để hiện lại.',
+      content: tTray('appMinimized'),
       iconType: 'info',
     })
   }
@@ -1055,6 +1279,7 @@ async function injectText(text: string) {
 
 let currentActionHotkey = 'Control+Space'
 let currentHistoryHotkey = 'Alt+V'
+let currentSettingsHotkey = 'Alt+S'
 
 function registerGlobalShortcut() {
   const config = loadConfig()
@@ -1103,6 +1328,31 @@ function registerNewHistoryHotkey(hotkey: string) {
   } catch (e) {
     console.warn('Failed to register new history hotkey', e)
     registerHistoryShortcut()
+  }
+}
+
+function registerSettingsShortcut() {
+  const config = loadConfig()
+  currentSettingsHotkey = config.settingsHotkey || 'Alt+S'
+  const electronHotkey = currentSettingsHotkey.replace('Win', 'Super')
+  try {
+    globalShortcut.register(electronHotkey, () => createSettingsWindow())
+  } catch (e) {
+    console.warn('Failed to register settings shortcut', e)
+  }
+}
+
+function registerNewSettingsHotkey(hotkey: string) {
+  const electronHotkey = hotkey.replace('Win', 'Super')
+  try {
+    if (currentSettingsHotkey) {
+      globalShortcut.unregister(currentSettingsHotkey.replace('Win', 'Super'))
+    }
+    globalShortcut.register(electronHotkey, () => createSettingsWindow())
+    currentSettingsHotkey = hotkey
+  } catch (e) {
+    console.warn('Failed to register new settings hotkey', e)
+    registerSettingsShortcut()
   }
 }
 
@@ -1212,9 +1462,9 @@ function setupIPC() {
     } catch (error: any) {
       const msg = error.message || 'Unknown error'
       if (msg === 'NO_API_KEY') {
-        dialog.showErrorBox('Voice to Text - Thiếu API Key', 'Chưa có API Key!\nVui lòng mở Cài đặt (click icon System Tray) và nhập Gemini API Key, hoặc tạo file .env chứa VITE_GEMINI_API_KEY.')
+        dialog.showErrorBox('Voice to Prompt - Thiếu API Key', 'Chưa có API Key!\nVui lòng mở Cài đặt (click icon System Tray) và nhập Gemini API Key, hoặc tạo file .env chứa VITE_GEMINI_API_KEY.')
       } else {
-        dialog.showErrorBox('Voice to Text - Lỗi xử lý giọng nói', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
+        dialog.showErrorBox('Voice to Prompt - Lỗi xử lý giọng nói', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
       }
       return { success: false, error: msg }
     }
@@ -1229,7 +1479,7 @@ function setupIPC() {
       return { success: true, text }
     } catch (error: any) {
       const msg = error.message || 'Unknown error'
-      dialog.showErrorBox('Voice to Text - Lỗi Whisper', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
+      dialog.showErrorBox('Voice to Prompt - Lỗi Whisper', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
       return { success: false, error: msg }
     }
   })
@@ -1307,12 +1557,20 @@ function setupIPC() {
     }
   })
 
+  ipcMain.on('register-settings-hotkey', (_event, hotkey: string) => {
+    try {
+      registerNewSettingsHotkey(hotkey)
+    } catch (err: any) {
+      console.error('Failed to register settings hotkey:', err)
+    }
+  })
+
   ipcMain.handle('save-config', (_event, config: Partial<AppConfig>) => {
     try {
       saveConfig(config)
       return { success: true }
     } catch (err: any) {
-      dialog.showErrorBox('Voice to Text - Lỗi lưu cài đặt', `Không thể lưu cấu hình.\n\nChi tiết: ${err.message || 'Lỗi ghi file'}`)
+      dialog.showErrorBox('Voice to Prompt - Lỗi lưu cài đặt', `Không thể lưu cấu hình.\n\nChi tiết: ${err.message || 'Lỗi ghi file'}`)
       return { success: false }
     }
   })
@@ -1507,6 +1765,7 @@ app.whenReady().then(() => {
   createTray()
   registerGlobalShortcut()
   registerHistoryShortcut()
+  registerSettingsShortcut()
   setupIPC()
 })
 
