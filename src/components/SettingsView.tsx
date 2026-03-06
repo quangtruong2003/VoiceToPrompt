@@ -243,7 +243,7 @@ export function SettingsView() {
 
     // Whisper engine state
     const [transcriptionEngine, setTranscriptionEngine] = useState<'gemini' | 'whisper'>('gemini')
-    const [whisperModel, setWhisperModel] = useState('onnx-community/whisper-small')
+    const [whisperModel, setWhisperModel] = useState('small')
     const [whisperModels, setWhisperModels] = useState<{ id: string; name: string; size: string }[]>([])
     const [isDeletingWhisper, setIsDeletingWhisper] = useState(false)
     const [isDownloadingWhisper, setIsDownloadingWhisper] = useState(false)
@@ -251,6 +251,7 @@ export function SettingsView() {
     const [whisperModelPath, setWhisperModelPath] = useState<string>('')
     const [downloadedModels, setDownloadedModels] = useState<Set<string>>(new Set())
     const [whisperTask, setWhisperTask] = useState<'transcribe' | 'translate'>('transcribe')
+    const [whisperLanguage, setWhisperLanguage] = useState<string>('auto')
 
     const { devices: audioDevices, selectedDeviceId: selectedAudioDevice, isLoading: audioDevicesLoading, selectDevice: setAudioDevice, reloadDevices: reloadAudioDevices } = useAudioDevices()
 
@@ -328,6 +329,9 @@ export function SettingsView() {
             if (config.whisperTask) {
                 setWhisperTask(config.whisperTask)
             }
+            if (config.whisperLanguage) {
+                setWhisperLanguage(config.whisperLanguage)
+            }
 
             if (config.hotkey) {
                 const parts = config.hotkey.split('+')
@@ -400,6 +404,12 @@ export function SettingsView() {
         setWhisperTask(task)
         await window.electronAPI.saveConfig({ whisperTask: task })
         showToast(t('settings.engine.taskSaved'), 'success')
+    }
+
+    const handleWhisperLanguageChange = async (lang: string) => {
+        setWhisperLanguage(lang)
+        await window.electronAPI.saveConfig({ whisperLanguage: lang })
+        showToast(t('settings.engine.languageSaved'), 'success')
     }
 
     const handleDownloadWhisperModel = async () => {
@@ -1222,6 +1232,39 @@ export function SettingsView() {
                                                 <span className="provider-label">{t('settings.engine.taskTranslate')}</span>
                                             </button>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="list-grouped-card">
+                                    <div className="list-grouped-item">
+                                        <div className="list-item-left">
+                                            <span className="list-item-label">{t('settings.engine.whisperLanguage')}</span>
+                                            <span className="list-item-hint">{t('settings.engine.whisperLanguageHint')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="list-grouped-item no-border">
+                                        <select
+                                            className="settings-select"
+                                            value={whisperLanguage}
+                                            onChange={(e) => handleWhisperLanguageChange(e.target.value)}
+                                        >
+                                            <option value="auto">{t('settings.engine.languageAuto')}</option>
+                                            <option value="vi">Tiếng Việt</option>
+                                            <option value="en">English</option>
+                                            <option value="zh">中文</option>
+                                            <option value="ja">日本語</option>
+                                            <option value="ko">한국어</option>
+                                            <option value="fr">Français</option>
+                                            <option value="de">Deutsch</option>
+                                            <option value="es">Español</option>
+                                            <option value="ru">Русский</option>
+                                            <option value="ar">العربية</option>
+                                            <option value="pt">Português</option>
+                                            <option value="it">Italiano</option>
+                                            <option value="id">Bahasa Indonesia</option>
+                                            <option value="hi">हिन्दी</option>
+                                            <option value="th">ภาษาไทย</option>
+                                        </select>
                                     </div>
                                 </div>
 

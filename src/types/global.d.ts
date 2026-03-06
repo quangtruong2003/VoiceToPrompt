@@ -19,6 +19,7 @@ interface AppConfig {
   whisperModel: string
   whisperModelPath: string
   whisperTask?: 'transcribe' | 'translate'
+  whisperLanguage?: string
   // Punctuation & Formatting Settings
   punctuationSettings?: {
     autoCapitalize: boolean

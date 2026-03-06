@@ -14,6 +14,10 @@ import {
 } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
+import { spawn } from 'child_process'
+import https from 'https'
+import http from 'http'
 import { performanceMonitor } from './performance-monitor'
 
 let overlayWindow: BrowserWindow | null = null
@@ -21,6 +25,7 @@ let settingsWindow: BrowserWindow | null = null
 let historyWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isRecording = false
+let isProcessing = false // true while whisper transcription is in-flight; blocks new recordings
 let isInTray = false // Track if app is minimized to tray
 
 // Extend app with custom property for quit handling
@@ -42,6 +47,7 @@ const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
 
 type TrayLocaleKey = 
   | 'selectEngine' | 'geminiApi' | 'whisperLocal'
+  | 'speechLanguage' | 'langAuto'
   | 'checkUpdates' | 'history' | 'settings'
   | 'startRecording' | 'stopRecording' | 'exit'
   | 'updateAvailable' | 'updateMessage' | 'currentVersion' | 'newVersion'
@@ -51,6 +57,8 @@ interface TrayLocale {
   selectEngine: string
   geminiApi: string
   whisperLocal: string
+  speechLanguage: string
+  langAuto: string
   checkUpdates: string
   history: string
   settings: string
@@ -71,6 +79,8 @@ const TRAY_LOCALES: Record<string, TrayLocale> = {
     selectEngine: 'Select Engine',
     geminiApi: 'Gemini API',
     whisperLocal: 'Whisper Local',
+    speechLanguage: 'Speech Language',
+    langAuto: 'Auto Detect',
     checkUpdates: 'Check for Updates',
     history: 'History',
     settings: 'Settings',
@@ -89,6 +99,8 @@ const TRAY_LOCALES: Record<string, TrayLocale> = {
     selectEngine: 'Chọn Engine',
     geminiApi: 'Gemini API',
     whisperLocal: 'Whisper Local',
+    speechLanguage: 'Ngôn ngữ nói',
+    langAuto: 'Tự động',
     checkUpdates: 'Kiểm tra cập nhật',
     history: 'Lịch sử',
     settings: 'Cài đặt',
@@ -107,6 +119,8 @@ const TRAY_LOCALES: Record<string, TrayLocale> = {
     selectEngine: 'エンジンを選択',
     geminiApi: 'Gemini API',
     whisperLocal: 'Whisper (ローカル)',
+    speechLanguage: '音声言語',
+    langAuto: '自動検出',
     checkUpdates: 'アップデートを確認',
     history: '履歴',
     settings: '設定',
@@ -125,6 +139,8 @@ const TRAY_LOCALES: Record<string, TrayLocale> = {
     selectEngine: '엔진 선택',
     geminiApi: 'Gemini API',
     whisperLocal: 'Whisper (로컬)',
+    speechLanguage: '음성 언어',
+    langAuto: '자동 감지',
     checkUpdates: '업데이트 확인',
     history: '기록',
     settings: '설정',
@@ -143,6 +159,8 @@ const TRAY_LOCALES: Record<string, TrayLocale> = {
     selectEngine: '选择引擎',
     geminiApi: 'Gemini API',
     whisperLocal: 'Whisper (本地)',
+    speechLanguage: '语音语言',
+    langAuto: '自动检测',
     checkUpdates: '检查更新',
     history: '历史',
     settings: '设置',
@@ -198,6 +216,7 @@ interface AppConfig {
   whisperModel: string
   whisperModelPath: string
   whisperTask: 'transcribe' | 'translate'
+  whisperLanguage: string
   // Punctuation & Formatting Settings
   punctuationSettings: {
     autoCapitalize: boolean
@@ -307,9 +326,10 @@ function loadConfig(forceReload = false): AppConfig {
         settingsHotkey: 'Alt+S',
         geminiModel: 'gemini-2.0-flash',
         transcriptionEngine: 'gemini',
-        whisperModel: 'onnx-community/whisper-small',
+        whisperModel: 'small',
         whisperModelPath: '',
         whisperTask: 'transcribe' as const,
+        whisperLanguage: 'auto',
         punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
 
         ...config
@@ -338,9 +358,10 @@ function loadConfig(forceReload = false): AppConfig {
     settingsHotkey: 'Alt+S',
     geminiModel: 'gemini-2.0-flash',
     transcriptionEngine: 'gemini',
-    whisperModel: 'onnx-community/whisper-small',
+    whisperModel: 'small',
     whisperModelPath: '',
     whisperTask: 'transcribe' as const,
+    whisperLanguage: 'auto',
     punctuationSettings: DEFAULT_PUNCTUATION_SETTINGS,
   }
   
@@ -459,8 +480,8 @@ function broadcastConfigUpdate(partial: Partial<AppConfig>) {
     }
   }
 
-  // Rebuild tray menu when language or settingsHotkey changes
-  if (tray && (partial.language !== undefined || partial.settingsHotkey !== undefined)) {
+  // Rebuild tray menu when language, whisperLanguage, or settingsHotkey changes
+  if (tray && (partial.language !== undefined || partial.whisperLanguage !== undefined || partial.settingsHotkey !== undefined)) {
     currentSettingsHotkey = partial.settingsHotkey || currentSettingsHotkey
     tray.setContextMenu(buildTrayMenu())
   }
@@ -799,6 +820,16 @@ function generateFallbackIcon(size: number, rgb: number[]): Electron.NativeImage
 function buildTrayMenu(): Electron.Menu {
   const config = loadConfig()
   const currentEngine = config.transcriptionEngine || 'gemini'
+  const currentLang = config.whisperLanguage || 'auto'
+
+  const SPEECH_LANGUAGES = [
+    { code: 'auto', label: tTray('langAuto') },
+    { code: 'vi',   label: 'Tiếng Việt' },
+    { code: 'en',   label: 'English' },
+    { code: 'zh',   label: '中文' },
+    { code: 'ja',   label: '日本語' },
+    { code: 'ko',   label: '한국어' },
+  ]
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -823,6 +854,18 @@ function buildTrayMenu(): Electron.Menu {
           },
         },
       ],
+    },
+    {
+      label: tTray('speechLanguage'),
+      submenu: SPEECH_LANGUAGES.map(({ code, label }) => ({
+        label,
+        type: 'checkbox' as const,
+        checked: currentLang === code,
+        click: () => {
+          saveConfig({ whisperLanguage: code })
+          tray?.setContextMenu(buildTrayMenu())
+        },
+      })),
     },
     { type: 'separator' },
     {
@@ -966,6 +1009,13 @@ function unregisterRecordingShortcuts() {
 }
 
 function toggleRecording() {
+  // Handy-style state machine: ignore hotkey while transcription is in-flight.
+  // Processing state must finish (succeed or fail) before a new recording can start.
+  if (isProcessing) {
+    console.log('[recording] Ignoring toggle — transcription in progress')
+    return
+  }
+
   isRecording = !isRecording
 
   if (isRecording) {
@@ -1091,20 +1141,19 @@ async function transcribeAudio(audioBuffer: ArrayBuffer, language: string): Prom
 }
 
 // ============================================================
-// WHISPER LOCAL TRANSCRIPTION (Transformers.js + ONNX)
+// WHISPER LOCAL TRANSCRIPTION (whisper.cpp GGML)
 // ============================================================
 
+// GGML models — same set as Handy-main
 const WHISPER_MODELS = [
-  { id: 'onnx-community/whisper-tiny', name: 'Whisper Tiny', size: '~75MB' },
-  { id: 'onnx-community/whisper-base', name: 'Whisper Base', size: '~142MB' },
-  { id: 'onnx-community/whisper-small', name: 'Whisper Small', size: '~461MB' },
-  { id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large V3 Turbo', size: '~1.5GB' },
-  { id: 'onnx-community/PhoWhisper-base-ONNX', name: 'PhoWhisper Base (Vietnamese)', size: '~140MB' },
+  { id: 'tiny',           name: 'Whisper Tiny',           size: '~75MB'  },
+  { id: 'base',           name: 'Whisper Base',           size: '~142MB' },
+  { id: 'small',          name: 'Whisper Small',          size: '~461MB' },
+  { id: 'large-v3-turbo', name: 'Whisper Large V3 Turbo', size: '~809MB' },
 ]
 
-let whisperPipeline: any = null
-let currentWhisperModelId: string | null = null
-let currentWhisperCacheDir: string | null = null
+// Official GGML model download base URL (ggerganov's HuggingFace repo)
+const GGML_MODEL_BASE_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main'
 
 function getWhisperCacheDir(): string {
   const config = loadConfig()
@@ -1114,142 +1163,370 @@ function getWhisperCacheDir(): string {
   return path.join(app.getPath('userData'), 'whisper-models')
 }
 
-async function getWhisperPipeline(modelId: string) {
+// Locate the pre-built whisper-cli binary bundled with the app.
+// Dev: resources/whisper/ (relative to project root)
+// Packaged: extraResources → process.resourcesPath/whisper/
+function getWhisperBinaryPath(): string {
+  const binaryName = 'whisper-cli.exe'
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'whisper', binaryName)
+  }
+  // In dev, the resources/ folder lives next to package.json
+  return path.join(app.getAppPath(), 'resources', 'whisper', binaryName)
+}
+
+// Download a GGML .bin model file with live progress events sent to the settings window.
+async function downloadGGMLModel(modelId: string): Promise<void> {
   const cacheDir = getWhisperCacheDir()
+  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true })
 
-  if (whisperPipeline && currentWhisperModelId === modelId && currentWhisperCacheDir === cacheDir) {
-    return whisperPipeline
+  const filename = `ggml-${modelId}.bin`
+  const destPath = path.join(cacheDir, filename)
+  const url = `${GGML_MODEL_BASE_URL}/${filename}`
+
+  console.log(`Downloading Whisper model ${modelId} from ${url}...`)
+
+  const sendProgress = (status: string, progress: number) => {
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('whisper-download-progress', { modelId, status, progress })
+    }
   }
 
-  const { pipeline, env } = await import('@huggingface/transformers')
+  sendProgress('downloading', 0)
 
-  // Set custom cache directory globally for transformers
-  env.cacheDir = cacheDir
-  env.localModelPath = cacheDir
-  env.allowLocalModels = true
-  env.allowRemoteModels = true
+  await new Promise<void>((resolve, reject) => {
+    const doRequest = (requestUrl: string, redirectCount = 0) => {
+      if (redirectCount > 5) { reject(new Error('Too many redirects')); return }
 
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true })
-  }
+      const parsedUrl = new URL(requestUrl)
+      const req = https.get({ hostname: parsedUrl.hostname, path: parsedUrl.pathname + parsedUrl.search, headers: { 'User-Agent': 'voice-to-text-app' } }, (res) => {
+        // Handle redirect
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume()
+          doRequest(res.headers.location, redirectCount + 1)
+          return
+        }
 
-  console.log(`Loading Whisper model: ${modelId} (cache: ${cacheDir})...`)
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}: ${requestUrl}`))
+          return
+        }
 
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.webContents.send('whisper-download-progress', {
-      modelId,
-      status: 'loading',
-      progress: 0,
-    })
-  }
+        const totalBytes = parseInt(res.headers['content-length'] || '0', 10)
+        let downloadedBytes = 0
+        const writeStream = fs.createWriteStream(destPath)
 
-  // Also pass to pipeline options as fallback
-  whisperPipeline = await pipeline('automatic-speech-recognition', modelId, {
-    dtype: 'q8',
-    cache_dir: cacheDir,
+        res.on('data', (chunk: Buffer) => {
+          downloadedBytes += chunk.length
+          if (totalBytes > 0) {
+            const pct = Math.round((downloadedBytes / totalBytes) * 100)
+            sendProgress('downloading', pct)
+          }
+        })
+
+        res.pipe(writeStream)
+        writeStream.on('finish', () => {
+          sendProgress('ready', 100)
+          console.log(`Whisper model ${modelId} downloaded to ${destPath}`)
+          resolve()
+        })
+        writeStream.on('error', (err) => {
+          fs.unlink(destPath, () => {})
+          reject(err)
+        })
+        res.on('error', (err) => {
+          fs.unlink(destPath, () => {})
+          reject(err)
+        })
+      })
+      req.on('error', reject)
+    }
+    doRequest(url)
   })
-  currentWhisperModelId = modelId
-  currentWhisperCacheDir = cacheDir
+}
 
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.webContents.send('whisper-download-progress', {
-      modelId,
-      status: 'ready',
-      progress: 100,
+// ============================================================
+// WHISPER-SERVER — persistent HTTP server (model stays in RAM)
+// mirrors Handy-main's "load once, transcribe many" pattern
+// ============================================================
+
+let whisperServerProc: ReturnType<typeof spawn> | null = null
+let whisperServerModelPath = ''
+let whisperServerReady = false
+const WHISPER_SERVER_PORT = 8765
+
+
+function getWhisperServerPath(): string {
+  const binaryName = 'whisper-server.exe'
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'whisper', binaryName)
+  }
+  return path.join(app.getAppPath(), 'resources', 'whisper', binaryName)
+}
+
+function stopWhisperServer(): void {
+  if (whisperServerProc) {
+    try { whisperServerProc.kill() } catch { /* ignore */ }
+    whisperServerProc = null
+    whisperServerModelPath = ''
+    whisperServerReady = false
+    console.log('[whisper-server] Stopped')
+  }
+}
+
+function httpGetText(url: string, timeoutMs = 2000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      let data = ''
+      res.on('data', (c: Buffer) => { data += c.toString() })
+      res.on('end', () => resolve(data))
     })
+    req.on('error', reject)
+    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('timeout')) })
+  })
+}
+
+async function waitForWhisperServer(timeoutMs = 45000): Promise<void> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    if (!whisperServerProc) throw new Error('whisper-server process died during startup')
+    try {
+      await httpGetText(`http://127.0.0.1:${WHISPER_SERVER_PORT}/`, 1000)
+      whisperServerReady = true
+      console.log('[whisper-server] Ready')
+      return
+    } catch {
+      await new Promise(r => setTimeout(r, 400))
+    }
+  }
+  throw new Error('whisper-server failed to start within timeout')
+}
+
+/** Ensures the server is up with the given model. Returns false if binary missing (use CLI fallback). */
+async function ensureWhisperServer(modelPath: string): Promise<boolean> {
+  // Already running with the right model
+  if (whisperServerProc && whisperServerReady && whisperServerModelPath === modelPath) {
+    return true
   }
 
-  console.log(`Whisper model ${modelId} loaded successfully`)
-  return whisperPipeline
+  const serverPath = getWhisperServerPath()
+  if (!fs.existsSync(serverPath)) {
+    return false  // no binary → fall back to whisper-cli
+  }
+
+  // Kill existing if model changed or crashed
+  stopWhisperServer()
+
+  const binDir = path.dirname(serverPath)
+  const threads = Math.min(os.cpus().length, 8).toString()
+
+  console.log(`[whisper-server] Starting — model: ${path.basename(modelPath)}, threads: ${threads}`)
+
+  whisperServerProc = spawn(serverPath, [
+    '-m', modelPath,
+    '--port', WHISPER_SERVER_PORT.toString(),
+    '--host', '127.0.0.1',
+    '-t', threads,
+    '--no-context', '0',
+    '--max-context', '0',  // store 0 context tokens — each request is fully independent, no cross-call memory
+    '--no-fallback',       // stay at temperature=0 (greedy); never escalate to random sampling
+    '--suppress-nst',      // suppress non-speech tokens (music, applause markers, etc.)
+  ], { cwd: binDir, stdio: ['ignore', 'pipe', 'pipe'] })
+
+  whisperServerModelPath = modelPath
+  whisperServerReady = false
+
+  whisperServerProc.stdout?.on('data', (d: Buffer) => {
+    const msg = d.toString()
+    if (msg.toLowerCase().includes('listen')) {
+      whisperServerReady = true
+    }
+    console.log('[whisper-server]', msg.trim())
+  })
+  whisperServerProc.stderr?.on('data', (d: Buffer) => {
+    const msg = d.toString().trim()
+    if (msg) console.log('[whisper-server stderr]', msg)
+  })
+  whisperServerProc.on('error', (err) => {
+    console.error('[whisper-server] Process error:', err)
+    whisperServerProc = null; whisperServerModelPath = ''; whisperServerReady = false
+  })
+  whisperServerProc.on('close', (code) => {
+    console.log(`[whisper-server] Exited with code ${code}`)
+    whisperServerProc = null; whisperServerModelPath = ''; whisperServerReady = false
+  })
+
+  await waitForWhisperServer()
+  return true
+}
+
+function transcribeViaServer(wavBuffer: Buffer, language: string, task: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const boundary = `----WhisperBoundary${Date.now()}`
+    const parts: Buffer[] = []
+
+    const addField = (name: string, value: string) => {
+      parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`))
+    }
+
+    // Audio file
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`))
+    parts.push(wavBuffer)
+    parts.push(Buffer.from('\r\n'))
+
+    addField('language', language)
+    addField('response_format', 'json')
+    addField('temperature', '0')     // greedy decoding — deterministic, fastest, most coherent
+    addField('no_context', '1')      // ignore any server-side context from previous requests
+    if (task === 'translate') addField('translate', 'true')
+
+    parts.push(Buffer.from(`--${boundary}--\r\n`))
+
+    const body = Buffer.concat(parts)
+    const options: http.RequestOptions = {
+      hostname: '127.0.0.1',
+      port: WHISPER_SERVER_PORT,
+      path: '/inference',
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+      },
+    }
+
+    const req = http.request(options, (res) => {
+      let data = ''
+      res.on('data', (chunk: Buffer) => { data += chunk.toString() })
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if (json.error) {
+            reject(new Error(`Whisper server: ${json.error}`))
+            return
+          }
+          const text = (json.text as string) ?? ''
+          console.log(`[whisper-server] HTTP ${res.statusCode} — text length: ${text.length}`)
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`Whisper server HTTP ${res.statusCode}: ${text.slice(0, 200)}`))
+            return
+          }
+          resolve(text)
+        } catch {
+          reject(new Error(`Invalid JSON from whisper-server (HTTP ${res.statusCode}): ${data.slice(0, 200)}`))
+        }
+      })
+    })
+    req.on('error', (err) => {
+      console.error('[whisper-server] HTTP request error:', err.message)
+      reject(err)
+    })
+    req.write(body)
+    req.end()
+  })
 }
 
 async function transcribeWithWhisper(pcmFloat32: Float32Array, language: string): Promise<string> {
   const config = loadConfig()
-  const modelId = config.whisperModel
+  const modelId = config.whisperModel || 'small'
+  const cacheDir = getWhisperCacheDir()
+  const modelPath = path.join(cacheDir, `ggml-${modelId}.bin`)
 
-  const pipe = await getWhisperPipeline(modelId)
-
-  const whisperTask = config.whisperTask
-
-  // Mirror the whisper.cpp / Handy approach:
-  // - Beam search (beam_size=3) gives better accuracy than greedy decoding
-  // - condition_on_prev_tokens=false prevents the model from hallucinating
-  //   based on its own previous output (main cause of repeated "Hello, hello, hello...")
-  // - compression_ratio_threshold & logprob_threshold reject low-quality segments
-  //   (same as whisper.cpp's built-in quality gates)
-  const isLargeModel = modelId.toLowerCase().includes('large') || modelId.toLowerCase().includes('turbo')
-
-  const generateKwargs: Record<string, any> = {
-    num_beams: 3,                       // beam search — same as whisper.cpp default
-    do_sample: false,                   // no random sampling when using beams
-    max_new_tokens: 448,                // Whisper's natural maximum
-    condition_on_prev_tokens: false,    // key: stops hallucination loops
-    compression_ratio_threshold: 2.4,  // reject overly repetitive segments
-    logprob_threshold: -1.0,           // reject low-confidence segments
-    no_speech_threshold: 0.6,          // treat as silence when no-speech prob > 0.6
-  }
-  if (isLargeModel) {
-    generateKwargs.repetition_penalty = 1.3  // extra safety for large/turbo models
+  if (!fs.existsSync(modelPath)) {
+    throw new Error(`Whisper model ggml-${modelId}.bin not found. Please download it in Settings.`)
   }
 
-  const generationOptions: Record<string, any> = {
-    task: whisperTask,
-    generate_kwargs: generateKwargs,
-  }
-
-  // Try to force language auto-detection by passing empty language token
-  // This is a workaround for Transformers.js defaulting to English
-  // The language token format is <|X|> where X is the language name
-  // Setting to empty string may trigger auto-detection in some versions
-  const languageMap: Record<string, string> = {
-    'vi': 'vietnamese',
-    'en': 'english',
-  }
-
-  // Only set language when explicitly provided; otherwise let Whisper auto-detect.
+  // Resolve language: IPC param → config.whisperLanguage → 'auto'
   const normalizedLang = language?.toLowerCase().trim()
-  if (normalizedLang && normalizedLang !== 'auto' && languageMap[normalizedLang]) {
-    generationOptions.language = languageMap[normalizedLang]
-    console.log(`Using explicit language: ${generationOptions.language}`)
-  } else {
-    console.log('Using auto language detection')
+  const configLang = config.whisperLanguage?.toLowerCase().trim()
+  const resolvedLang = (normalizedLang && normalizedLang !== 'auto')
+    ? normalizedLang
+    : (configLang && configLang !== 'auto' ? configLang : 'auto')
+  const whisperTask = config.whisperTask || 'transcribe'
+
+  // Build WAV buffer from Float32 PCM (common to both paths)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { WaveFile } = require('wavefile') as { WaveFile: new () => any }
+  const wav = new WaveFile()
+  const int16 = new Int16Array(pcmFloat32.length)
+  for (let i = 0; i < pcmFloat32.length; i++) {
+    int16[i] = Math.max(-32768, Math.min(32767, Math.round(pcmFloat32[i] * 32767)))
   }
+  wav.fromScratch(1, 16000, '16', int16)
+  const wavBuffer = Buffer.from(wav.toBuffer())
 
   const callMetrics = performanceMonitor.startApiCall('local://whisper', 'PROCESS')
   const startTime = Date.now()
-  let result: any
-  try {
-    result = await pipe(pcmFloat32, generationOptions)
-    performanceMonitor.completeApiCall(callMetrics, 200, Date.now() - startTime)
-  } catch (err) {
-    performanceMonitor.completeApiCall(callMetrics, 500, Date.now() - startTime)
-    throw err
+
+  let rawText: string
+
+  // ── PATH A: whisper-server (model stays in RAM, fast after first call) ──────
+  const useServer = await ensureWhisperServer(modelPath).catch(() => false)
+
+  if (useServer) {
+    console.log(`[whisper] Using persistent server — samples: ${pcmFloat32.length}, duration: ${(pcmFloat32.length / 16000).toFixed(1)}s, lang: ${resolvedLang}`)
+    rawText = await transcribeViaServer(wavBuffer, resolvedLang, whisperTask)
+  } else {
+    // ── PATH B: whisper-cli fallback (spawn new process, loads model each time) ──
+    const binaryPath = getWhisperBinaryPath()
+    if (!fs.existsSync(binaryPath)) {
+      throw new Error(`whisper-cli binary not found at ${binaryPath}. Please reinstall the app.`)
+    }
+
+    const wavPath = path.join(os.tmpdir(), `whisper_${Date.now()}_${process.pid}.wav`)
+    fs.writeFileSync(wavPath, wavBuffer)
+
+    console.log(`[whisper] Using CLI fallback (slow path) — add whisper-server.exe for faster transcription`)
+
+    try {
+      const threads = Math.min(os.cpus().length, 8).toString()
+      const args: string[] = [
+        '-m', modelPath,
+        '-f', wavPath,
+        '-l', resolvedLang,
+        '--beam-size', '3',
+        '-t', threads,
+        '--no-timestamps',
+        '-nt',
+        '-np',
+      ]
+      if (whisperTask === 'translate') args.push('--translate')
+
+      rawText = await new Promise<string>((resolve, reject) => {
+        let stdout = ''
+        let stderr = ''
+        const binDir = path.dirname(binaryPath)
+        const proc = spawn(binaryPath, args, { cwd: binDir })
+        proc.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+        proc.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+        proc.on('error', reject)
+        proc.on('close', (code) => {
+          if (code !== 0) reject(new Error(`whisper-cli exited with code ${code}: ${stderr}`))
+          else resolve(stdout)
+        })
+      })
+    } finally {
+      try { fs.unlinkSync(wavPath) } catch { /* ignore */ }
+    }
   }
 
-  let rawText = (result?.text || '').trim()
+  performanceMonitor.completeApiCall(callMetrics, 200, Date.now() - startTime)
 
-  // Remove Whisper's own annotation tokens: [laughter], [music], (silence), etc.
-  // These are bracketed/parenthesised tokens injected by the model itself, not real speech.
-  // Do NOT remove bare words — that would corrupt legitimate transcription.
-  rawText = rawText.replace(/\[.*?\]/g, '')  // [laughter], [music], [BLANK_AUDIO]
-  rawText = rawText.replace(/\(.*?\)/g, '')  // (silence), (laughing)
+  console.log(`[whisper] Raw output: "${rawText.slice(0, 200)}"`)
 
-  // Discard output that is only a no-speech sentinel
-  if (/^\s*(silence|blank|unintelligible|♪|♫)\s*$/i.test(rawText)) {
-    rawText = ''
-  }
+  // Remove whisper noise/artifact annotations only — not all parenthetical text.
+  // Square brackets always mark whisper artifacts ([BLANK_AUDIO], [inaudible], etc.)
+  // Round brackets only when they contain known whisper noise markers.
+  const WHISPER_NOISE = /silence|no audio|inaudible|blank audio|background (music|noise)|applause|laughter|music|noise|static|beep|cough|sigh/i
+  let text = rawText
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(([^)]*)\)/g, (match, inner) => WHISPER_NOISE.test(inner) ? '' : match)
+    .replace(/\s+/g, ' ')
+    .trim()
 
-  // For large/turbo models only: collapse aggressive repetition loops that slip through
-  // e.g. "hello hello hello hello" → "hello hello" (keep up to 2 occurrences)
-  if (isLargeModel) {
-    rawText = rawText.replace(/\b(\w+)(?:\s+\1){3,}\b/gi, '$1 $1')  // 4+ repeats → 2
-  }
-
-  // Normalise whitespace
-  rawText = rawText.replace(/\s+/g, ' ').trim()
+  if (/^(silence|blank|unintelligible)$/i.test(text)) text = ''
 
   const punctuationSettings = config.punctuationSettings || DEFAULT_PUNCTUATION_SETTINGS
-  return formatText(rawText, punctuationSettings)
+  return formatText(text, punctuationSettings)
 }
 
 
@@ -1559,6 +1836,7 @@ function setupIPC() {
 
   ipcMain.handle('transcribe-whisper-audio', async (_event, pcmArray: number[], language: string) => {
     isRecording = false
+    isProcessing = true
     unregisterRecordingShortcuts()
     try {
       let pcmFloat32 = new Float32Array(pcmArray)
@@ -1573,11 +1851,14 @@ function setupIPC() {
       }
 
       const text = await transcribeWithWhisper(pcmFloat32, language)
+      console.log(`[whisper] Transcription result: "${text.slice(0, 100)}" (${text.length} chars)`)
       return { success: true, text }
     } catch (error: any) {
       const msg = error.message || 'Unknown error'
-      dialog.showErrorBox('Voice to Prompt - Lỗi Whisper', `Không thể chuyển đổi giọng nói thành văn bản.\n\nChi tiết: ${msg}`)
+      console.error('[whisper] Transcription failed:', msg)
       return { success: false, error: msg }
+    } finally {
+      isProcessing = false
     }
   })
 
@@ -1665,6 +1946,10 @@ function setupIPC() {
   ipcMain.handle('save-config', (_event, config: Partial<AppConfig>) => {
     try {
       saveConfig(config)
+      // If whisper model/path changed, restart the server on next transcription
+      if (config.whisperModel !== undefined || config.whisperModelPath !== undefined) {
+        stopWhisperServer()
+      }
       return { success: true }
     } catch (err: any) {
       dialog.showErrorBox('Voice to Prompt - Lỗi lưu cài đặt', `Không thể lưu cấu hình.\n\nChi tiết: ${err.message || 'Lỗi ghi file'}`)
@@ -1689,7 +1974,9 @@ function setupIPC() {
 
   ipcMain.handle('download-whisper-model', async (_event, modelId: string) => {
     try {
-      await getWhisperPipeline(modelId)
+      await downloadGGMLModel(modelId)
+      // New model downloaded — stop server so it restarts with the new model next transcription
+      stopWhisperServer()
       return { success: true }
     } catch (error: any) {
       console.error('Failed to download whisper model:', error)
@@ -1700,9 +1987,9 @@ function setupIPC() {
   ipcMain.handle('check-whisper-model-downloaded', async (_event, modelId: string) => {
     try {
       const cacheDir = getWhisperCacheDir()
-      const modelPath = path.join(cacheDir, modelId)
-      const exists = fs.existsSync(modelPath) && fs.existsSync(path.join(modelPath, 'config.json'))
-      return { downloaded: exists }
+      // GGML model is a single .bin file
+      const modelPath = path.join(cacheDir, `ggml-${modelId}.bin`)
+      return { downloaded: fs.existsSync(modelPath) }
     } catch {
       return { downloaded: false }
     }
@@ -1711,10 +1998,8 @@ function setupIPC() {
   ipcMain.handle('delete-whisper-model', async (_event, modelId: string) => {
     try {
       const cacheDir = getWhisperCacheDir()
-      const modelPath = path.join(cacheDir, modelId)
-      if (fs.existsSync(modelPath)) {
-        fs.rmSync(modelPath, { recursive: true, force: true })
-      }
+      const modelPath = path.join(cacheDir, `ggml-${modelId}.bin`)
+      if (fs.existsSync(modelPath)) fs.unlinkSync(modelPath)
       return { success: true }
     } catch (error: any) {
       console.error('Failed to delete whisper model:', error)
@@ -1873,7 +2158,7 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
-  // Clean up tray
+  stopWhisperServer()
   if (tray) {
     tray.destroy()
     tray = null

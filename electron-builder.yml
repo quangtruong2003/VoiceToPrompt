@@ -20,6 +20,14 @@ files:
   - "!**/*.map"
   - "!**/node_modules/.cache/**"
   - "!**/*.ts"
+extraResources:
+  - from: "resources/whisper/"
+    to: "whisper"
+    filter:
+      - "whisper-cli.exe"
+      - "whisper-server.exe"
+      - "whisper-cli"
+      - "*.dll"
 asar: true
 asarUnpack:
   - "**/*.node"
